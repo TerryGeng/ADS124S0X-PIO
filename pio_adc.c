@@ -38,22 +38,6 @@ void pio_spi_write8_read8_blocking_dma(const pio_spi_inst_t *spi, uint8_t *buffe
     dma_channel_configure(spi->dma_chan_tx, &ctx, &spi->pio->txf[spi->sm], buffer_tx, len, true);
     dma_channel_configure(spi->dma_chan_rx, &crx, buffer_rx, &spi->pio->rxf[spi->sm], len, true);
 
-    ctx = dma_get_channel_config(spi->dma_chan_tx);
-    crx = dma_get_channel_config(spi->dma_chan_rx);
-
-	printf("####### channel tx config 0x%2x, read addr %p, write addr %p, block size %d\n",
-            ctx,
-            buffer_tx,
-            &spi->pio->txf[spi->sm],
-            len
-            );
-	printf("####### channel rx config 0x%2x, read addr %p, write addr %p, block size %d\n",
-            crx,
-            &spi->pio->rxf[spi->sm],
-            buffer_rx,
-            len
-            );
-
     dma_channel_wait_for_finish_blocking(spi->dma_chan_rx);
 }
 
@@ -707,9 +691,7 @@ void pio_spi_odm_write_read(
     }
 }
 
-void pio_spi_odm_inst_do_tx(struct pio_spi_odm_raw_program *pgm,
-        uint8_t tx_byte, bool do_rx) {
-
+void pio_spi_odm_inst_do_tx_rx(struct pio_spi_odm_raw_program *pgm, uint8_t tx_byte, bool do_rx) {
     uint8_t raw_pio_inst = 0;
 
     pgm->rx_cnt += do_rx;
@@ -744,6 +726,17 @@ void pio_spi_odm_inst_do_wait(struct pio_spi_odm_raw_program *pgm) {
 
         ++pgm->iptr;
     }
+}
+
+void pio_spi_odm_print_pgm(struct pio_spi_odm_raw_program *pgm) {
+    size_t raw_pio_insts_cnt = pgm->iptr + 1;
+
+    printf("Total insts: %d = (%d bytes)\n", 2 * pgm->iptr + pgm->half, raw_pio_insts_cnt);
+    for (int i = 0; i < raw_pio_insts_cnt; ++i) {
+        printf("%d:     0x%02x\n", i, pgm->raw_inst[i]);
+    }
+    printf("End.\n");
+
 }
 
 
@@ -810,9 +803,9 @@ int main() {
                  ADS1X4S0X_TX_PIN,
                  ADS1X4S0X_RX_PIN
     );
+
     const uint8_t num_of_chan = 3;
     uint8_t chan_config[] = {0x01, 0x23, 0x45};
-
     uint8_t raw_pio_insts[num_of_chan*40];
     struct pio_spi_odm_raw_program pgm = {
         .raw_inst = raw_pio_insts,
@@ -822,28 +815,21 @@ int main() {
     };
 
     for (int i = 0; i < num_of_chan; ++i) {
-        pio_spi_odm_inst_do_tx(&pgm, ADS1X4S0X_COMMAND_WREG | ADS1X4S0X_REGISTER_INPMUX, false);
+        pio_spi_odm_inst_do_tx_rx(&pgm, ADS1X4S0X_COMMAND_WREG | ADS1X4S0X_REGISTER_INPMUX, false);
+        pio_spi_odm_inst_do_tx_rx(&pgm, 0x00, false);
+        pio_spi_odm_inst_do_tx_rx(&pgm, chan_config[i], false);
 
-        pio_spi_odm_inst_do_tx(&pgm, 0x00, false);
-        pio_spi_odm_inst_do_tx(&pgm, chan_config[i], false);
-        pio_spi_odm_inst_do_tx(&pgm, ADS1X4S0X_COMMAND_START, false);
+        pio_spi_odm_inst_do_tx_rx(&pgm, ADS1X4S0X_COMMAND_START, false);
         pio_spi_odm_inst_do_wait(&pgm);
-        pio_spi_odm_inst_do_tx(&pgm, ADS1X4S0X_COMMAND_RDATA, false);
-        pio_spi_odm_inst_do_tx(&pgm, 0x00, true);
-        pio_spi_odm_inst_do_tx(&pgm, 0x00, true);
-        pio_spi_odm_inst_do_tx(&pgm, 0x00, true);
-        pio_spi_odm_inst_do_tx(&pgm, 0x00, true);
+
+        pio_spi_odm_inst_do_tx_rx(&pgm, ADS1X4S0X_COMMAND_RDATA, false);
+        pio_spi_odm_inst_do_tx_rx(&pgm, 0x00, true);
+        pio_spi_odm_inst_do_tx_rx(&pgm, 0x00, true);
+        pio_spi_odm_inst_do_tx_rx(&pgm, 0x00, true);
+        pio_spi_odm_inst_do_tx_rx(&pgm, 0x00, true);
     }
 
-    size_t raw_pio_insts_cnt = pgm.iptr + 1;
-
-    raw_pio_insts[pgm.iptr] |= 0x06;
-
-    printf("Total insts: %d = (%d bytes)\n", 2 * pgm.iptr + pgm.half, raw_pio_insts_cnt);
-    for (int i = 0; i < raw_pio_insts_cnt; ++i) {
-        printf("%d:     0x%02x\n", i, raw_pio_insts[i]);
-    }
-    printf("End.\n");
+    pio_spi_odm_print_pgm(&pgm);
 
     uint8_t rx_buf[4*num_of_chan];
 
