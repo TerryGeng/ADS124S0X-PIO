@@ -706,7 +706,7 @@ void pio_spi_odm_inst_finalize(struct pio_spi_odm_raw_program *pgm) {
     pgm->tx_cnt = pgm->iptr + 1;
 
     if (pgm->half) {
-        pgm->raw_inst[pgm->iptr] |= 0x06;
+        pgm->raw_inst[pgm->iptr] |= (1 << 3);
     }
 }
 
@@ -825,14 +825,12 @@ int main() {
 
     uint8_t rx_buf[4*NUM_OF_CHAN];
 
+    gpio_put(ADS1X4S0X_CS_PIN, 0);
     while (true) {
-        gpio_put(ADS1X4S0X_CS_PIN, 0);
         sleep_ms(1);
 
     /*    pio_spi_odm_write_read(&spi, &pgm, rx_buf);*/
         pio_spi_odm_write8_read8_blocking_dma(&spi_odm, &pgm, rx_buf);
-
-        gpio_put(ADS1X4S0X_CS_PIN, 1);
 
         for (int i = 0; i < NUM_OF_CHAN; ++i) {
             sample = (int32_t)sys_get_be32(&rx_buf[i*4]) >> (32 - ADS1X4S0X_RESOLUTION);
@@ -843,6 +841,9 @@ int main() {
         }
         sleep_ms(1000);
     }
+
+    gpio_put(ADS1X4S0X_CS_PIN, 1);
+
 
     /*uint32_t tot_read_cnt = 0;*/
     /*io_rw_8 *rxfifo = (io_rw_8 *) &spi_odm->pio->rxf[spi_odm->sm];*/

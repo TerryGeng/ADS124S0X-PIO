@@ -177,7 +177,7 @@ static inline void pio_spi_cs_init(PIO pio, uint sm, uint prog_offs, uint n_bits
 .program spi_cpha1_read_on_demand
 .side_set 1
 
-; Total 4 bit of input: 0 + SKIP_DELAY_BIT + SKIP_READ_BIT + WRITE_DATA_BIT
+; Total 4 bit of input: NOP_BIT + SKIP_DELAY_BIT + SKIP_READ_BIT + WRITE_DATA_BIT
 ; Shift direction: <left>
 
 ; input pins: [0] MISO, [1] trigger (active low)
@@ -189,16 +189,20 @@ armed:
     out x, 1         side 0    ; discard next WRITE_DATA_BIT bit
 public wait_inst:
     wait 0 gpio 6    side 0    ; wait for the trigger to be asserted LOW
-    ;nop side 0
 public entry_point:
 .wrap_target
-do_spi:
-    out x, 2        side 0     ; Take SKIP_DELAY_BIT, stall here on empty (keep SCK deasserted)
-    out y, 1        side 0     ; Take SKIP_READ_BIT
+next_inst:
+    out x, 1         side 0     ; Take NOP_BIT, stall here on empty (keep SCK deasserted)
+    jmp !x not_nop   side 0     ; If NOP bit not set, jump to wait (armed)
+    out x, 3         side 0     ; discard next 3 bit
+    jmp next_inst    side 0
+not_nop:
+    out x, 1         side 0     ; Take SKIP_DELAY_BIT
+    out y, 1         side 0     ; Take SKIP_READ_BIT
     jmp !x armed     side 0     ; If SKIP_DELAY_BIT set, jump to wait (armed)
-    out pins, 1     side 1 [2] ; Output WRITE_DATA_BIT, assert SCK (mov pins uses OUT mapping)
+    out pins, 1      side 1 [4] ; Output WRITE_DATA_BIT, assert SCK (mov pins uses OUT mapping)
     jmp !y read      side 1     ; If SKIP_READ_BIT not set, go to read
-    jmp do_spi    side 0       ; otherwise start next round
+    jmp next_inst    side 0       ; otherwise start next round
 read:
     in pins, 1      side 0     ; Read input data, deassert SCK
 .wrap
