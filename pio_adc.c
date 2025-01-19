@@ -11,6 +11,7 @@
 #include "hardware/spi.h"
 #include "hardware/dma.h"
 #include "hardware/pio.h"
+#include "hardware/irq.h"
 #include "spi.pio.h"
 
 #define ADS1X4S0X_CS_PIN        5
@@ -583,8 +584,9 @@ void pio_spi_odm_write8_read8_blocking_dma(
 
 static void pio_spi_odm_dma_run_forever(struct pio_spi_odm_config *spi_odm,
         struct pio_spi_odm_raw_program *pgm,
-        uint8_t *rx_buf1, size_t rx_buf_len1,
-        uint8_t *rx_buf2, size_t rx_buf_len2) {
+        irq_handler_t handler,
+        uint8_t *rx_buf1, size_t rx_buf1_len,
+        uint8_t *rx_buf2, size_t rx_buf2_len) {
 
     dma_channel_config txcc1 = dma_channel_get_default_config(spi_odm->dma_chan_tx_ctrl1);
     dma_channel_config txcc2 = dma_channel_get_default_config(spi_odm->dma_chan_tx_ctrl2);
@@ -629,25 +631,32 @@ static void pio_spi_odm_dma_run_forever(struct pio_spi_odm_config *spi_odm,
 
     dma_channel_configure(spi_odm->dma_chan_tx, &txc, &spi_odm->pio->txf[spi_odm->sm], NULL, 0, false);
 
-    dma_start_channel_mask(1u << spi_odm->dma_chan_tx_ctrl1);
-
-
     /* Config rx */
-    /*channel_config_set_read_increment(&rxc1, false);*/
-    /*channel_config_set_write_increment(&rxc1, true);*/
-    /*channel_config_set_dreq(&rxc1, pio_get_dreq(spi->pio, spi->sm, false));*/
-    /*channel_config_set_transfer_data_size(&rxc1, DMA_SIZE_8);*/
-    /*channel_config_set_chain_to(&rxc1, spi_odm->dma_chan_rx2);*/
-    /**/
-    /*dma_channel_configure(spi->dma_chan_rx1, &crx1, spi_odm->rx_sche1.buffer, &spi->pio->rxf[spi->sm], spi_odm->rx_sche1.cnt, false);*/
-    /**/
-    /*channel_config_set_read_increment(&rxc2, false);*/
-    /*channel_config_set_write_increment(&rxc2, true);*/
-    /*channel_config_set_dreq(&rxc1, pio_get_dreq(spi->pio, spi->sm, false));*/
-    /*channel_config_set_transfer_data_size(&rxc2, DMA_SIZE_8);*/
-    /*channel_config_set_chain_to(&rxc2, spi_odm->dma_chan_rx1);*/
-    /**/
-    /*dma_channel_configure(spi->dma_chan_rx2, &crx2, spi_odm->rx_sche2.buffer, &spi->pio->rxf[spi->sm], spi_odm->rx_sche2.cnt, false);*/
+    channel_config_set_read_increment(&rxc1, false);
+    channel_config_set_write_increment(&rxc1, true);
+    channel_config_set_dreq(&rxc1, pio_get_dreq(spi_odm->pio, spi_odm->sm, false));
+    channel_config_set_transfer_data_size(&rxc1, DMA_SIZE_8);
+    channel_config_set_chain_to(&rxc1, spi_odm->dma_chan_rx2);
+
+    dma_channel_configure(spi_odm->dma_chan_rx1, &rxc1, rx_buf1, &spi_odm->pio->rxf[spi_odm->sm], rx_buf1_len, false);
+
+    channel_config_set_read_increment(&rxc2, false);
+    channel_config_set_write_increment(&rxc2, true);
+    channel_config_set_dreq(&rxc2, pio_get_dreq(spi_odm->pio, spi_odm->sm, false));
+    channel_config_set_transfer_data_size(&rxc2, DMA_SIZE_8);
+    channel_config_set_chain_to(&rxc2, spi_odm->dma_chan_rx1);
+
+    dma_channel_configure(spi_odm->dma_chan_rx2, &rxc2, rx_buf2, &spi_odm->pio->rxf[spi_odm->sm], rx_buf2_len, false);
+
+    // Tell the DMA to raise IRQ line 0 when the channel finishes a block
+    dma_channel_set_irq0_enabled(spi_odm->dma_chan_rx1, true);
+    dma_channel_set_irq0_enabled(spi_odm->dma_chan_rx2, true);
+
+    // Configure the processor to run dma_handler() when DMA IRQ 0 is asserted
+    irq_set_exclusive_handler(DMA_IRQ_0, handler);
+    irq_set_enabled(DMA_IRQ_0, true);
+
+    dma_start_channel_mask((1u << spi_odm->dma_chan_rx1) | (1u << spi_odm->dma_chan_tx_ctrl1));
 }
 
 void pio_spi_odm_inst_do_tx_rx(struct pio_spi_odm_raw_program *pgm, uint8_t tx_byte, bool do_rx) {
@@ -737,8 +746,27 @@ struct multiple_reading_buf {
     uint32_t readings[NUM_OF_CHAN];
 };
 
-static struct multiple_reading_buf rx_buf1[100];
-static struct multiple_reading_buf rx_buf2[100];
+static struct multiple_reading_buf rx_buf1[6];
+static struct multiple_reading_buf rx_buf2[6];
+
+bool rx_buf1_ready = false;
+bool rx_buf2_ready = false;
+
+void __not_in_flash_func(dma_handler)() {
+    uint8_t ints0 = dma_hw->ints0;
+
+    if (first_run || (ints0 & (1u << spi_odm.dma_chan_rx1))) {
+        dma_hw->ch[spi_odm.dma_chan_rx1].write_addr = (uint8_t *)rx_buf1;
+        rx_buf1_ready = true;
+    }
+    if (first_run || (ints0 & (1u << spi_odm.dma_chan_rx2))) {
+        dma_hw->ints0 = 1u << spi_odm.dma_chan_rx2;
+        dma_hw->ch[spi_odm.dma_chan_rx2].write_addr = (uint8_t *)rx_buf2;
+        rx_buf2_ready = true;
+    }
+
+    dma_hw->ints0 = ints0;
+}
 
 int main() {
     stdio_init_all();
@@ -783,7 +811,7 @@ int main() {
     ads124s06_write_register(ADS1X4S0X_REGISTER_GPIODAT, 0xe1);
 
     ads124s06_write_register(ADS1X4S0X_REGISTER_PGA, 0x00);
-    ads124s06_write_register(ADS1X4S0X_REGISTER_DATARATE, 0x31);
+    ads124s06_write_register(ADS1X4S0X_REGISTER_DATARATE, 0x32);
     ads124s06_write_register(ADS1X4S0X_REGISTER_REF, 0x39);
     ads124s06_write_register(ADS1X4S0X_REGISTER_IDACMAG, 0x00);
     ads124s06_write_register(ADS1X4S0X_REGISTER_IDACMUX, 0xff);
@@ -846,25 +874,41 @@ int main() {
     gpio_put(ADS1X4S0X_CS_PIN, 0);
 
     pio_spi_odm_dma_run_forever(&spi_odm, &pgm,
-            (uint8_t *)&rx_buf1,
-            sizeof(rx_buf1)/sizeof(struct multiple_reading_buf),
-            (uint8_t *)&rx_buf2,
-            sizeof(rx_buf2)/sizeof(struct multiple_reading_buf)
+            dma_handler,
+            (uint8_t *)rx_buf1,
+            sizeof(rx_buf1)/sizeof(uint8_t),
+            (uint8_t *)rx_buf2,
+            sizeof(rx_buf2)/sizeof(uint8_t)
             );
 
+    int64_t my_val_mv;
+    float my_fval_mv;
+
     while (true) {
-        for (uint8_t j = 0; j < pgm.rx_cnt; j++) {
-            ((uint8_t *)rx_buf)[j] = pio_sm_get_blocking(spi_odm.pio, spi_odm.sm);
+        tight_loop_contents();
+        sleep_ms(1);
+        if (rx_buf1_ready) {
+            rx_buf1_ready = false;
+            for (size_t j = 0; j < sizeof(rx_buf1)/sizeof(struct multiple_reading_buf); ++j) {
+                for (int i = 0; i < NUM_OF_CHAN; ++i) {
+                    sample = (int32_t)sys_get_be32((uint8_t *)&(rx_buf1[j].readings[i])) >> (32 - ADS1X4S0X_RESOLUTION);
+                    my_val_mv = (int64_t)sample * 2500 >> 23;
+                    my_fval_mv = 2500.0 * sample / (1 << 23);
+                    printf("[1:%2d] %d: Read 0x%06x = %d = %lld mV = %.3f mV\n", j, i, sample, sample, my_val_mv, my_fval_mv);
+                }
+            }
         }
 
-        for (int i = 0; i < NUM_OF_CHAN; ++i) {
-            sample = (int32_t)sys_get_be32((uint8_t *)&rx_buf->readings[i]) >> (32 - ADS1X4S0X_RESOLUTION);
-            int64_t my_val_mv = (int64_t)sample * 2500 >> 23;
-            float my_fval_mv = 2500.0 * sample / (1 << 23);
-
-            printf("%d: Read 0x%06x = %d = %d mV = %.3f mV\n", i, sample, sample, my_val_mv, my_fval_mv);
-
-            tot_read_cnt++;
+        if (rx_buf2_ready) {
+            rx_buf2_ready = false;
+            for (size_t j = 0; j < sizeof(rx_buf2)/sizeof(struct multiple_reading_buf); ++j) {
+                for (int i = 0; i < NUM_OF_CHAN; ++i) {
+                    sample = (int32_t)sys_get_be32((uint8_t *)&(rx_buf2[j].readings[i])) >> (32 - ADS1X4S0X_RESOLUTION);
+                    my_val_mv = (int64_t)sample * 2500 >> 23;
+                    my_fval_mv = 2500.0 * sample / (1 << 23);
+                    printf("[2:%2d] %d: Read 0x%06x = %d = %lld mV = %.3f mV\n", j, i, sample, sample, my_val_mv, my_fval_mv);
+                }
+            }
         }
     }
 
