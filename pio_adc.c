@@ -20,11 +20,6 @@
 
 #define ADS1X4S0X_DRDY_PIN      6
 
-struct pio_spi_odm_transfer_schedule {
-    uint32_t cnt;
-    uint8_t *buffer;
-};
-
 struct pio_spi_odm_config {
     PIO pio;
     uint8_t sm;
@@ -34,9 +29,6 @@ struct pio_spi_odm_config {
     uint8_t dma_chan_rx2;
     uint8_t dma_chan_tx_ctrl1;
     uint8_t dma_chan_tx_ctrl2;
-    struct pio_spi_odm_transfer_schedule tx_sche;
-    struct pio_spi_odm_transfer_schedule rx_sche1;
-    struct pio_spi_odm_transfer_schedule rx_sche2;
 };
 
 struct pio_spi_odm_raw_program {
@@ -600,48 +592,45 @@ static void pio_spi_odm_dma_run_forever(struct pio_spi_odm_config *spi_odm,
     dma_channel_config rxc1 = dma_channel_get_default_config(spi_odm->dma_chan_rx1);
     dma_channel_config rxc2 = dma_channel_get_default_config(spi_odm->dma_chan_rx2);
 
-
-    spi_odm->tx_sche.buffer = pgm->raw_inst;
-    spi_odm->tx_sche.cnt = pgm->tx_cnt;
-
-    spi_odm->rx_sche1.buffer = rx_buf1;
-    spi_odm->rx_sche1.cnt = rx_buf_len1;
-
-    spi_odm->rx_sche2.buffer = rx_buf2;
-    spi_odm->rx_sche2.cnt = rx_buf_len2;
-
     /* Config tx */
+
     channel_config_set_transfer_data_size(&txcc1, DMA_SIZE_32);
     channel_config_set_read_increment(&txcc1, false);
     channel_config_set_write_increment(&txcc1, false);
+    channel_config_set_chain_to(&txcc1, spi_odm->dma_chan_tx_ctrl2);
 
     dma_channel_configure(
         spi_odm->dma_chan_tx_ctrl1,
         &txcc1,
-        &dma_hw->ch[spi_odm->dma_chan_tx_ctrl2].al3_read_addr_trig,
-        &spi_odm->tx_sche,
+        &dma_hw->ch[spi_odm->dma_chan_tx].al3_transfer_count,
+        &pgm->tx_cnt,
         1,
         false
     );
 
     channel_config_set_transfer_data_size(&txcc2, DMA_SIZE_32);
-    channel_config_set_read_increment(&txcc2, true);
-    channel_config_set_write_increment(&txcc2, true);
+    channel_config_set_read_increment(&txcc2, false);
+    channel_config_set_write_increment(&txcc2, false);
 
     dma_channel_configure(
         spi_odm->dma_chan_tx_ctrl2,
         &txcc2,
-        &dma_hw->ch[spi_odm->dma_chan_tx].al3_transfer_count,
-        NULL,
-        2,
+        &dma_hw->ch[spi_odm->dma_chan_tx].al3_read_addr_trig,
+        &pgm->raw_inst,
+        1,
         false
     );
 
-    channel_config_set_transfer_data_size(&txc, DMA_SIZE_8);
     channel_config_set_read_increment(&txc, true);
     channel_config_set_write_increment(&txc, false);
-    dma_channel_configure(spi_odm->dma_chan_tx, &txc, &spi_odm->pio->txf[spi_odm->sm], NULL, 0, false);
+    channel_config_set_dreq(&txc, pio_get_dreq(spi_odm->pio, spi_odm->sm, true));
+    channel_config_set_transfer_data_size(&txc, DMA_SIZE_8);
     channel_config_set_chain_to(&txc, spi_odm->dma_chan_tx_ctrl1);
+
+    dma_channel_configure(spi_odm->dma_chan_tx, &txc, &spi_odm->pio->txf[spi_odm->sm], NULL, 0, false);
+
+    dma_start_channel_mask(1u << spi_odm->dma_chan_tx_ctrl1);
+
 
     /* Config rx */
     /*channel_config_set_read_increment(&rxc1, false);*/
@@ -744,6 +733,13 @@ static struct pio_spi_odm_raw_program pgm = {
     .rx_cnt = 0
 };
 
+struct multiple_reading_buf {
+    uint32_t readings[NUM_OF_CHAN];
+};
+
+static struct multiple_reading_buf rx_buf1[100];
+static struct multiple_reading_buf rx_buf2[100];
+
 int main() {
     stdio_init_all();
 #if !defined(spi_default) || !defined(ADS1X4S0X_SCK_PIN) || !defined(ADS1X4S0X_TX_PIN) || !defined(ADS1X4S0X_RX_PIN) || !defined(ADS1X4S0X_CS_PIN)
@@ -787,7 +783,7 @@ int main() {
     ads124s06_write_register(ADS1X4S0X_REGISTER_GPIODAT, 0xe1);
 
     ads124s06_write_register(ADS1X4S0X_REGISTER_PGA, 0x00);
-    ads124s06_write_register(ADS1X4S0X_REGISTER_DATARATE, 0x38);
+    ads124s06_write_register(ADS1X4S0X_REGISTER_DATARATE, 0x31);
     ads124s06_write_register(ADS1X4S0X_REGISTER_REF, 0x39);
     ads124s06_write_register(ADS1X4S0X_REGISTER_IDACMAG, 0x00);
     ads124s06_write_register(ADS1X4S0X_REGISTER_IDACMUX, 0xff);
@@ -800,7 +796,7 @@ int main() {
 
     pio_spi_read_on_demand_init(spi_odm.pio, spi_odm.sm, offset,
                  8,       // 8 bits per SPI frame
-                 31.25f,  // 1 MHz @ 125 clk_sys
+                 10,      // 1 MHz @ 125 clk_sys
                  ADS1X4S0X_SCK_PIN,
                  ADS1X4S0X_TX_PIN,
                  ADS1X4S0X_RX_PIN
@@ -823,56 +819,54 @@ int main() {
     pio_spi_odm_inst_finalize(&pgm);
     pio_spi_odm_print_pgm(&pgm);
 
-    uint8_t rx_buf[4*NUM_OF_CHAN];
+    struct multiple_reading_buf rx_buf[1];
+
+    /**/
+    /*gpio_put(ADS1X4S0X_CS_PIN, 0);*/
+    /*while (true) {*/
+    /*    sleep_ms(1);*/
+    /**/
+    /*//    pio_spi_odm_write_read(&spi_odm, &pgm, (uint8_t *)&rx_buf);*/
+    /*    pio_spi_odm_write8_read8_blocking_dma(&spi_odm, &pgm, (uint8_t *)rx_buf);*/
+    /**/
+    /*    for (int i = 0; i < NUM_OF_CHAN; ++i) {*/
+    /*        sample = (int32_t)sys_get_be32((uint8_t *)&rx_buf->readings[i]) >> (32 - ADS1X4S0X_RESOLUTION);*/
+    /*        int64_t my_val_mv = (int64_t)sample * 2500 >> 23;*/
+    /*        float my_fval_mv = 2500.0 * sample / (1 << 23);*/
+    /**/
+    /*        printf("%d: Read 0x%06x = %d = %d mV = %.3f mV\n", i, sample, sample, my_val_mv, my_fval_mv);*/
+    /*    }*/
+    /*    sleep_ms(1000);*/
+    /*}*/
+    /**/
+    /*gpio_put(ADS1X4S0X_CS_PIN, 1);*/
+
+    uint32_t tot_read_cnt = 0;
 
     gpio_put(ADS1X4S0X_CS_PIN, 0);
-    while (true) {
-        sleep_ms(1);
 
-    /*    pio_spi_odm_write_read(&spi, &pgm, rx_buf);*/
-        pio_spi_odm_write8_read8_blocking_dma(&spi_odm, &pgm, rx_buf);
+    pio_spi_odm_dma_run_forever(&spi_odm, &pgm,
+            (uint8_t *)&rx_buf1,
+            sizeof(rx_buf1)/sizeof(struct multiple_reading_buf),
+            (uint8_t *)&rx_buf2,
+            sizeof(rx_buf2)/sizeof(struct multiple_reading_buf)
+            );
+
+    while (true) {
+        for (uint8_t j = 0; j < pgm.rx_cnt; j++) {
+            ((uint8_t *)rx_buf)[j] = pio_sm_get_blocking(spi_odm.pio, spi_odm.sm);
+        }
 
         for (int i = 0; i < NUM_OF_CHAN; ++i) {
-            sample = (int32_t)sys_get_be32(&rx_buf[i*4]) >> (32 - ADS1X4S0X_RESOLUTION);
+            sample = (int32_t)sys_get_be32((uint8_t *)&rx_buf->readings[i]) >> (32 - ADS1X4S0X_RESOLUTION);
             int64_t my_val_mv = (int64_t)sample * 2500 >> 23;
             float my_fval_mv = 2500.0 * sample / (1 << 23);
 
             printf("%d: Read 0x%06x = %d = %d mV = %.3f mV\n", i, sample, sample, my_val_mv, my_fval_mv);
+
+            tot_read_cnt++;
         }
-        sleep_ms(1000);
     }
-
-    gpio_put(ADS1X4S0X_CS_PIN, 1);
-
-
-    /*uint32_t tot_read_cnt = 0;*/
-    /*io_rw_8 *rxfifo = (io_rw_8 *) &spi_odm->pio->rxf[spi_odm->sm];*/
-    /*uint8_t len = pgm.rx_cnt;*/
-    /**/
-    /*while (true) {*/
-    /*    for (uint8_t j = 0; j < pgm.rx_cnt; j++) {*/
-    /*        if (pio_sm_is_rx_fifo_empty(spi_odm->pio, spi_odm->sm)) {*/
-    /*            continue;*/
-    /*        }*/
-    /*        rx_buf[j] = *rxfifo;*/
-    /*    }*/
-    /**/
-    /*    for (int i = 0; i < NUM_OF_CHAN; ++i) {*/
-    /*        sample = (int32_t)sys_get_be32(&rx_buf[i*4]) >> (32 - ADS1X4S0X_RESOLUTION);*/
-    /*        int64_t my_val_mv = (int64_t)sample * 2500 >> 23;*/
-    /*        float my_fval_mv = 2500.0 * sample / (1 << 23);*/
-    /**/
-    /*        printf("[%d] %d: Read 0x%06x = %d = %d mV = %.3f mV\n",*/
-    /*                read_cnt,*/
-    /*                i,*/
-    /*                sample,*/
-    /*                sample,*/
-    /*                my_val_mv,*/
-    /*                my_fval_mv);*/
-    /**/
-    /*        read_cnt++;*/
-    /*    }*/
-    /*}*/
 
 #endif
 }

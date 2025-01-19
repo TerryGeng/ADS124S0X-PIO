@@ -179,16 +179,18 @@ static inline void pio_spi_cs_init(PIO pio, uint sm, uint prog_offs, uint n_bits
 
 ; Total 4 bit of input: NOP_BIT + SKIP_DELAY_BIT + SKIP_READ_BIT + WRITE_DATA_BIT
 ; Shift direction: <left>
-
+;
 ; input pins: [0] MISO, [1] trigger (active low)
 ; output pins: [0] MOSI
 ; side-set pins: [0] SCK
+;
+; 12 instructions per SCK cycle
 
 
 armed:
-    out x, 1         side 0    ; discard next WRITE_DATA_BIT bit
+    out x, 1         side 0     ; discard next WRITE_DATA_BIT bit
 public wait_inst:
-    wait 0 gpio 6    side 0    ; wait for the trigger to be asserted LOW
+    wait 0 gpio 6    side 0     ; wait for the trigger to be asserted LOW
 public entry_point:
 .wrap_target
 next_inst:
@@ -202,9 +204,9 @@ not_nop:
     jmp !x armed     side 0     ; If SKIP_DELAY_BIT set, jump to wait (armed)
     out pins, 1      side 1 [4] ; Output WRITE_DATA_BIT, assert SCK (mov pins uses OUT mapping)
     jmp !y read      side 1     ; If SKIP_READ_BIT not set, go to read
-    jmp next_inst    side 0       ; otherwise start next round
+    jmp next_inst    side 0     ; otherwise start next round
 read:
-    in pins, 1      side 0     ; Read input data, deassert SCK
+    in pins, 1      side 0      ; Read input data, deassert SCK
 .wrap
 
 % c-sdk {
