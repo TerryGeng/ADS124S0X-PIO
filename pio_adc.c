@@ -21,27 +21,6 @@
 
 #define ADS1X4S0X_DRDY_PIN      6
 
-struct pio_spi_odm_config {
-    PIO pio;
-    uint8_t sm;
-    uint8_t cs_pin;
-    uint8_t dma_chan_tx;
-    uint8_t dma_chan_rx1;
-    uint8_t dma_chan_rx2;
-    uint8_t dma_chan_tx_ctrl1;
-    uint8_t dma_chan_tx_ctrl2;
-};
-
-struct pio_spi_odm_raw_program {
-    uint8_t *raw_inst;
-    size_t tx_cnt;
-    size_t rx_cnt;
-    size_t iptr;
-    bool half;
-};
-
-///////////////////////////////////
-
 #define ADS1X4S0X_CLK_FREQ_IN_KHZ                           4096
 #define ADS1X4S0X_RESET_LOW_TIME_IN_CLOCK_CYCLES            4
 #define ADS1X4S0X_START_SYNC_PULSE_DURATION_IN_CLOCK_CYCLES 4
@@ -106,335 +85,25 @@ enum ads1x4s0x_register {
 	ADS124S0X_REGISTER_FSCAL2 = 0x0F,
 };
 
-#define ADS1X4S0X_REGISTER_GET_VALUE(value, pos, length)                                           \
-	FIELD_GET(GENMASK(pos + length - 1, pos), value)
-#define ADS1X4S0X_REGISTER_SET_VALUE(target, value, pos, length)                                   \
-	target &= ~GENMASK(pos + length - 1, pos);                                                 \
-	target |= FIELD_PREP(GENMASK(pos + length - 1, pos), value)
+struct pio_spi_odm_config {
+    PIO pio;
+    uint8_t sm;
+    uint8_t cs_pin;
+    uint8_t dma_chan_tx;
+    uint8_t dma_chan_rx1;
+    uint8_t dma_chan_rx2;
+    uint8_t dma_chan_tx_ctrl1;
+    uint8_t dma_chan_tx_ctrl2;
+};
 
-#define ADS1X4S0X_REGISTER_ID_DEV_ID_LENGTH 3
-#define ADS1X4S0X_REGISTER_ID_DEV_ID_POS    0
-#define ADS1X4S0X_REGISTER_ID_DEV_ID_GET(value)                                                    \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_ID_DEV_ID_POS,                      \
-				     ADS1X4S0X_REGISTER_ID_DEV_ID_LENGTH)
-#define ADS1X4S0X_REGISTER_ID_DEV_ID_SET(target, value)                                            \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_ID_DEV_ID_POS,              \
-				     ADS1X4S0X_REGISTER_ID_DEV_ID_LENGTH)
-#define ADS1X4S0X_REGISTER_STATUS_FL_POR_LENGTH 1
-#define ADS1X4S0X_REGISTER_STATUS_FL_POR_POS    7
-#define ADS1X4S0X_REGISTER_STATUS_FL_POR_GET(value)                                                \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_STATUS_FL_POR_POS,                  \
-				     ADS1X4S0X_REGISTER_STATUS_FL_POR_LENGTH)
-#define ADS1X4S0X_REGISTER_STATUS_FL_POR_SET(target, value)                                        \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_STATUS_FL_POR_POS,          \
-				     ADS1X4S0X_REGISTER_STATUS_FL_POR_LENGTH)
-#define ADS1X4S0X_REGISTER_STATUS_NOT_RDY_LENGTH 1
-#define ADS1X4S0X_REGISTER_STATUS_NOT_RDY_POS    6
-#define ADS1X4S0X_REGISTER_STATUS_NOT_RDY_GET(value)                                               \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_STATUS_NOT_RDY_POS,                 \
-				     ADS1X4S0X_REGISTER_STATUS_NOT_RDY_LENGTH)
-#define ADS1X4S0X_REGISTER_STATUS_NOT_RDY_SET(target, value)                                       \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_STATUS_NOT_RDY_POS,         \
-				     ADS1X4S0X_REGISTER_STATUS_NOT_RDY_LENGTH)
-#define ADS1X4S0X_REGISTER_STATUS_FL_P_RAILP_LENGTH 1
-#define ADS1X4S0X_REGISTER_STATUS_FL_P_RAILP_POS    5
-#define ADS1X4S0X_REGISTER_STATUS_FL_P_RAILP_GET(value)                                            \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_STATUS_FL_P_RAILP_POS,              \
-				     ADS1X4S0X_REGISTER_STATUS_FL_P_RAILP_LENGTH)
-#define ADS1X4S0X_REGISTER_STATUS_FL_P_RAILP_SET(target, value)                                    \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_STATUS_FL_P_RAILP_POS,      \
-				     ADS1X4S0X_REGISTER_STATUS_FL_P_RAILP_LENGTH)
-#define ADS1X4S0X_REGISTER_STATUS_FL_P_RAILN_LENGTH 1
-#define ADS1X4S0X_REGISTER_STATUS_FL_P_RAILN_POS    4
-#define ADS1X4S0X_REGISTER_STATUS_FL_P_RAILN_GET(value)                                            \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_STATUS_FL_P_RAILN_POS,              \
-				     ADS1X4S0X_REGISTER_STATUS_FL_P_RAILN_LENGTH)
-#define ADS1X4S0X_REGISTER_STATUS_FL_P_RAILN_SET(target, value)                                    \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_STATUS_FL_P_RAILN_POS,      \
-				     ADS1X4S0X_REGISTER_STATUS_FL_P_RAILN_LENGTH)
-#define ADS1X4S0X_REGISTER_STATUS_FL_N_RAILP_LENGTH 1
-#define ADS1X4S0X_REGISTER_STATUS_FL_N_RAILP_POS    3
-#define ADS1X4S0X_REGISTER_STATUS_FL_N_RAILP_GET(value)                                            \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_STATUS_FL_N_RAILP_POS,              \
-				     ADS1X4S0X_REGISTER_STATUS_FL_N_RAILP_LENGTH)
-#define ADS1X4S0X_REGISTER_STATUS_FL_N_RAILP_SET(target, value)                                    \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_STATUS_FL_N_RAILP_POS,      \
-				     ADS1X4S0X_REGISTER_STATUS_FL_N_RAILP_LENGTH)
-#define ADS1X4S0X_REGISTER_STATUS_FL_N_RAILN_LENGTH 1
-#define ADS1X4S0X_REGISTER_STATUS_FL_N_RAILN_POS    2
-#define ADS1X4S0X_REGISTER_STATUS_FL_N_RAILN_GET(value)                                            \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_STATUS_FL_N_RAILN_POS,              \
-				     ADS1X4S0X_REGISTER_STATUS_FL_N_RAILN_LENGTH)
-#define ADS1X4S0X_REGISTER_STATUS_FL_N_RAILN_SET(target, value)                                    \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_STATUS_FL_N_RAILN_POS,      \
-				     ADS1X4S0X_REGISTER_STATUS_FL_N_RAILN_LENGTH)
-#define ADS1X4S0X_REGISTER_STATUS_FL_REF_L1_LENGTH 1
-#define ADS1X4S0X_REGISTER_STATUS_FL_REF_L1_POS    1
-#define ADS1X4S0X_REGISTER_STATUS_FL_REF_L1_GET(value)                                             \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_STATUS_FL_REF_L1_POS,               \
-				     ADS1X4S0X_REGISTER_STATUS_FL_REF_L1_LENGTH)
-#define ADS1X4S0X_REGISTER_STATUS_FL_REF_L1_SET(target, value)                                     \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_STATUS_FL_REF_L1_POS,       \
-				     ADS1X4S0X_REGISTER_STATUS_FL_REF_L1_LENGTH)
-#define ADS1X4S0X_REGISTER_STATUS_FL_REF_L0_LENGTH 1
-#define ADS1X4S0X_REGISTER_STATUS_FL_REF_L0_POS    0
-#define ADS1X4S0X_REGISTER_STATUS_FL_REF_L0_GET(value)                                             \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_STATUS_FL_REF_L0_POS,               \
-				     ADS1X4S0X_REGISTER_STATUS_FL_REF_L0_LENGTH)
-#define ADS1X4S0X_REGISTER_STATUS_FL_REF_L0_SET(target, value)                                     \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_STATUS_FL_REF_L0_POS,       \
-				     ADS1X4S0X_REGISTER_STATUS_FL_REF_L0_LENGTH)
-#define ADS1X4S0X_REGISTER_INPMUX_MUXP_LENGTH 4
-#define ADS1X4S0X_REGISTER_INPMUX_MUXP_POS    4
-#define ADS1X4S0X_REGISTER_INPMUX_MUXP_GET(value)                                                  \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_INPMUX_MUXP_POS,                    \
-				     ADS1X4S0X_REGISTER_INPMUX_MUXP_LENGTH)
-#define ADS1X4S0X_REGISTER_INPMUX_MUXP_SET(target, value)                                          \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_INPMUX_MUXP_POS,            \
-				     ADS1X4S0X_REGISTER_INPMUX_MUXP_LENGTH)
-#define ADS1X4S0X_REGISTER_INPMUX_MUXN_LENGTH 4
-#define ADS1X4S0X_REGISTER_INPMUX_MUXN_POS    0
-#define ADS1X4S0X_REGISTER_INPMUX_MUXN_GET(value)                                                  \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_INPMUX_MUXN_POS,                    \
-				     ADS1X4S0X_REGISTER_INPMUX_MUXN_LENGTH)
-#define ADS1X4S0X_REGISTER_INPMUX_MUXN_SET(target, value)                                          \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_INPMUX_MUXN_POS,            \
-				     ADS1X4S0X_REGISTER_INPMUX_MUXN_LENGTH)
-#define ADS1X4S0X_REGISTER_PGA_DELAY_LENGTH 3
-#define ADS1X4S0X_REGISTER_PGA_DELAY_POS    5
-#define ADS1X4S0X_REGISTER_PGA_DELAY_GET(value)                                                    \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_PGA_DELAY_POS,                      \
-				     ADS1X4S0X_REGISTER_PGA_DELAY_LENGTH)
-#define ADS1X4S0X_REGISTER_PGA_DELAY_SET(target, value)                                            \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_PGA_DELAY_POS,              \
-				     ADS1X4S0X_REGISTER_PGA_DELAY_LENGTH)
-#define ADS1X4S0X_REGISTER_PGA_PGA_EN_LENGTH 2
-#define ADS1X4S0X_REGISTER_PGA_PGA_EN_POS    3
-#define ADS1X4S0X_REGISTER_PGA_PGA_EN_GET(value)                                                   \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_PGA_PGA_EN_POS,                     \
-				     ADS1X4S0X_REGISTER_PGA_PGA_EN_LENGTH)
-#define ADS1X4S0X_REGISTER_PGA_PGA_EN_SET(target, value)                                           \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_PGA_PGA_EN_POS,             \
-				     ADS1X4S0X_REGISTER_PGA_PGA_EN_LENGTH)
-#define ADS1X4S0X_REGISTER_PGA_GAIN_LENGTH 3
-#define ADS1X4S0X_REGISTER_PGA_GAIN_POS    0
-#define ADS1X4S0X_REGISTER_PGA_GAIN_GET(value)                                                     \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_PGA_GAIN_POS,                       \
-				     ADS1X4S0X_REGISTER_PGA_GAIN_LENGTH)
-#define ADS1X4S0X_REGISTER_PGA_GAIN_SET(target, value)                                             \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_PGA_GAIN_POS,               \
-				     ADS1X4S0X_REGISTER_PGA_GAIN_LENGTH)
-#define ADS1X4S0X_REGISTER_DATARATE_G_CHOP_LENGTH 1
-#define ADS1X4S0X_REGISTER_DATARATE_G_CHOP_POS    7
-#define ADS1X4S0X_REGISTER_DATARATE_G_CHOP_GET(value)                                              \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_DATARATE_G_CHOP_POS,                \
-				     ADS1X4S0X_REGISTER_DATARATE_G_CHOP_LENGTH)
-#define ADS1X4S0X_REGISTER_DATARATE_G_CHOP_SET(target, value)                                      \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_DATARATE_G_CHOP_POS,        \
-				     ADS1X4S0X_REGISTER_DATARATE_G_CHOP_LENGTH)
-#define ADS1X4S0X_REGISTER_DATARATE_CLK_LENGTH 1
-#define ADS1X4S0X_REGISTER_DATARATE_CLK_POS    6
-#define ADS1X4S0X_REGISTER_DATARATE_CLK_GET(value)                                                 \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_DATARATE_CLK_POS,                   \
-				     ADS1X4S0X_REGISTER_DATARATE_CLK_LENGTH)
-#define ADS1X4S0X_REGISTER_DATARATE_CLK_SET(target, value)                                         \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_DATARATE_CLK_POS,           \
-				     ADS1X4S0X_REGISTER_DATARATE_CLK_LENGTH)
-#define ADS1X4S0X_REGISTER_DATARATE_MODE_LENGTH 1
-#define ADS1X4S0X_REGISTER_DATARATE_MODE_POS    5
-#define ADS1X4S0X_REGISTER_DATARATE_MODE_GET(value)                                                \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_DATARATE_MODE_POS,                  \
-				     ADS1X4S0X_REGISTER_DATARATE_MODE_LENGTH)
-#define ADS1X4S0X_REGISTER_DATARATE_MODE_SET(target, value)                                        \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_DATARATE_MODE_POS,          \
-				     ADS1X4S0X_REGISTER_DATARATE_MODE_LENGTH)
-#define ADS1X4S0X_REGISTER_DATARATE_FILTER_LENGTH 1
-#define ADS1X4S0X_REGISTER_DATARATE_FILTER_POS    4
-#define ADS1X4S0X_REGISTER_DATARATE_FILTER_GET(value)                                              \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_DATARATE_FILTER_POS,                \
-				     ADS1X4S0X_REGISTER_DATARATE_FILTER_LENGTH)
-#define ADS1X4S0X_REGISTER_DATARATE_FILTER_SET(target, value)                                      \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_DATARATE_FILTER_POS,        \
-				     ADS1X4S0X_REGISTER_DATARATE_FILTER_LENGTH)
-#define ADS1X4S0X_REGISTER_DATARATE_DR_LENGTH 4
-#define ADS1X4S0X_REGISTER_DATARATE_DR_POS    0
-#define ADS1X4S0X_REGISTER_DATARATE_DR_GET(value)                                                  \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_DATARATE_DR_POS,                    \
-				     ADS1X4S0X_REGISTER_DATARATE_DR_LENGTH)
-#define ADS1X4S0X_REGISTER_DATARATE_DR_SET(target, value)                                          \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_DATARATE_DR_POS,            \
-				     ADS1X4S0X_REGISTER_DATARATE_DR_LENGTH)
-#define ADS1X4S0X_REGISTER_REF_FL_REF_EN_LENGTH 2
-#define ADS1X4S0X_REGISTER_REF_FL_REF_EN_POS    6
-#define ADS1X4S0X_REGISTER_REF_FL_REF_EN_GET(value)                                                \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_REF_FL_REF_EN_POS,                  \
-				     ADS1X4S0X_REGISTER_REF_FL_REF_EN_LENGTH)
-#define ADS1X4S0X_REGISTER_REF_FL_REF_EN_SET(target, value)                                        \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_REF_FL_REF_EN_POS,          \
-				     ADS1X4S0X_REGISTER_REF_FL_REF_EN_LENGTH)
-#define ADS1X4S0X_REGISTER_REF_NOT_REFP_BUF_LENGTH 1
-#define ADS1X4S0X_REGISTER_REF_NOT_REFP_BUF_POS    5
-#define ADS1X4S0X_REGISTER_REF_NOT_REFP_BUF_GET(value)                                             \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_REF_NOT_REFP_BUF_POS,               \
-				     ADS1X4S0X_REGISTER_REF_NOT_REFP_BUF_LENGTH)
-#define ADS1X4S0X_REGISTER_REF_NOT_REFP_BUF_SET(target, value)                                     \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_REF_NOT_REFP_BUF_POS,       \
-				     ADS1X4S0X_REGISTER_REF_NOT_REFP_BUF_LENGTH)
-#define ADS1X4S0X_REGISTER_REF_NOT_REFN_BUF_LENGTH 1
-#define ADS1X4S0X_REGISTER_REF_NOT_REFN_BUF_POS    4
-#define ADS1X4S0X_REGISTER_REF_NOT_REFN_BUF_GET(value)                                             \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_REF_NOT_REFN_BUF_POS,               \
-				     ADS1X4S0X_REGISTER_REF_NOT_REFN_BUF_LENGTH)
-#define ADS1X4S0X_REGISTER_REF_NOT_REFN_BUF_SET(target, value)                                     \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_REF_NOT_REFN_BUF_POS,       \
-				     ADS1X4S0X_REGISTER_REF_NOT_REFN_BUF_LENGTH)
-#define ADS1X4S0X_REGISTER_REF_REFSEL_LENGTH 2
-#define ADS1X4S0X_REGISTER_REF_REFSEL_POS    2
-#define ADS1X4S0X_REGISTER_REF_REFSEL_GET(value)                                                   \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_REF_REFSEL_POS,                     \
-				     ADS1X4S0X_REGISTER_REF_REFSEL_LENGTH)
-#define ADS1X4S0X_REGISTER_REF_REFSEL_SET(target, value)                                           \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_REF_REFSEL_POS,             \
-				     ADS1X4S0X_REGISTER_REF_REFSEL_LENGTH)
-#define ADS1X4S0X_REGISTER_REF_REFCON_LENGTH 2
-#define ADS1X4S0X_REGISTER_REF_REFCON_POS    0
-#define ADS1X4S0X_REGISTER_REF_REFCON_GET(value)                                                   \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_REF_REFCON_POS,                     \
-				     ADS1X4S0X_REGISTER_REF_REFCON_LENGTH)
-#define ADS1X4S0X_REGISTER_REF_REFCON_SET(target, value)                                           \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_REF_REFCON_POS,             \
-				     ADS1X4S0X_REGISTER_REF_REFCON_LENGTH)
-#define ADS1X4S0X_REGISTER_IDACMAG_FL_RAIL_EN_LENGTH 1
-#define ADS1X4S0X_REGISTER_IDACMAG_FL_RAIL_EN_POS    7
-#define ADS1X4S0X_REGISTER_IDACMAG_FL_RAIL_EN_GET(value)                                           \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_IDACMAG_FL_RAIL_EN_POS,             \
-				     ADS1X4S0X_REGISTER_IDACMAG_FL_RAIL_EN_LENGTH)
-#define ADS1X4S0X_REGISTER_IDACMAG_FL_RAIL_EN_SET(target, value)                                   \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_IDACMAG_FL_RAIL_EN_POS,     \
-				     ADS1X4S0X_REGISTER_IDACMAG_FL_RAIL_EN_LENGTH)
-#define ADS1X4S0X_REGISTER_IDACMAG_PSW_LENGTH 1
-#define ADS1X4S0X_REGISTER_IDACMAG_PSW_POS    6
-#define ADS1X4S0X_REGISTER_IDACMAG_PSW_GET(value)                                                  \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_IDACMAG_PSW_POS,                    \
-				     ADS1X4S0X_REGISTER_IDACMAG_PSW_LENGTH)
-#define ADS1X4S0X_REGISTER_IDACMAG_PSW_SET(target, value)                                          \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_IDACMAG_PSW_POS,            \
-				     ADS1X4S0X_REGISTER_IDACMAG_PSW_LENGTH)
-#define ADS1X4S0X_REGISTER_IDACMAG_IMAG_LENGTH 4
-#define ADS1X4S0X_REGISTER_IDACMAG_IMAG_POS    0
-#define ADS1X4S0X_REGISTER_IDACMAG_IMAG_GET(value)                                                 \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_IDACMAG_IMAG_POS,                   \
-				     ADS1X4S0X_REGISTER_IDACMAG_IMAG_LENGTH)
-#define ADS1X4S0X_REGISTER_IDACMAG_IMAG_SET(target, value)                                         \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_IDACMAG_IMAG_POS,           \
-				     ADS1X4S0X_REGISTER_IDACMAG_IMAG_LENGTH)
-#define ADS1X4S0X_REGISTER_IDACMUX_I2MUX_LENGTH 4
-#define ADS1X4S0X_REGISTER_IDACMUX_I2MUX_POS    4
-#define ADS1X4S0X_REGISTER_IDACMUX_I2MUX_GET(value)                                                \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_IDACMUX_I2MUX_POS,                  \
-				     ADS1X4S0X_REGISTER_IDACMUX_I2MUX_LENGTH)
-#define ADS1X4S0X_REGISTER_IDACMUX_I2MUX_SET(target, value)                                        \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_IDACMUX_I2MUX_POS,          \
-				     ADS1X4S0X_REGISTER_IDACMUX_I2MUX_LENGTH)
-#define ADS1X4S0X_REGISTER_IDACMUX_I1MUX_LENGTH 4
-#define ADS1X4S0X_REGISTER_IDACMUX_I1MUX_POS    0
-#define ADS1X4S0X_REGISTER_IDACMUX_I1MUX_GET(value)                                                \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_IDACMUX_I1MUX_POS,                  \
-				     ADS1X4S0X_REGISTER_IDACMUX_I1MUX_LENGTH)
-#define ADS1X4S0X_REGISTER_IDACMUX_I1MUX_SET(target, value)                                        \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_IDACMUX_I1MUX_POS,          \
-				     ADS1X4S0X_REGISTER_IDACMUX_I1MUX_LENGTH)
-#define ADS1X4S0X_REGISTER_VBIAS_VB_LEVEL_LENGTH 1
-#define ADS1X4S0X_REGISTER_VBIAS_VB_LEVEL_POS    7
-#define ADS1X4S0X_REGISTER_VBIAS_VB_LEVEL_GET(value)                                               \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_VBIAS_VB_LEVEL_POS,                 \
-				     ADS1X4S0X_REGISTER_VBIAS_VB_LEVEL_LENGTH)
-#define ADS1X4S0X_REGISTER_VBIAS_VB_LEVEL_SET(target, value)                                       \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_VBIAS_VB_LEVEL_POS,         \
-				     ADS1X4S0X_REGISTER_VBIAS_VB_LEVEL_LENGTH)
-#define ADS1X4S0X_REGISTER_GPIODAT_DIR_LENGTH 4
-#define ADS1X4S0X_REGISTER_GPIODAT_DIR_POS    4
-#define ADS1X4S0X_REGISTER_GPIODAT_DIR_GET(value)                                                  \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_GPIODAT_DIR_POS,                    \
-				     ADS1X4S0X_REGISTER_GPIODAT_DIR_LENGTH)
-#define ADS1X4S0X_REGISTER_GPIODAT_DIR_SET(target, value)                                          \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_GPIODAT_DIR_POS,            \
-				     ADS1X4S0X_REGISTER_GPIODAT_DIR_LENGTH)
-#define ADS1X4S0X_REGISTER_GPIODAT_DAT_LENGTH 4
-#define ADS1X4S0X_REGISTER_GPIODAT_DAT_POS    0
-#define ADS1X4S0X_REGISTER_GPIODAT_DAT_GET(value)                                                  \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_GPIODAT_DAT_POS,                    \
-				     ADS1X4S0X_REGISTER_GPIODAT_DAT_LENGTH)
-#define ADS1X4S0X_REGISTER_GPIODAT_DAT_SET(target, value)                                          \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_GPIODAT_DAT_POS,            \
-				     ADS1X4S0X_REGISTER_GPIODAT_DAT_LENGTH)
-#define ADS1X4S0X_REGISTER_GPIOCON_CON_LENGTH 4
-#define ADS1X4S0X_REGISTER_GPIOCON_CON_POS    0
-#define ADS1X4S0X_REGISTER_GPIOCON_CON_GET(value)                                                  \
-	ADS1X4S0X_REGISTER_GET_VALUE(value, ADS1X4S0X_REGISTER_GPIOCON_CON_POS,                    \
-				     ADS1X4S0X_REGISTER_GPIOCON_CON_LENGTH)
-#define ADS1X4S0X_REGISTER_GPIOCON_CON_SET(target, value)                                          \
-	ADS1X4S0X_REGISTER_SET_VALUE(target, value, ADS1X4S0X_REGISTER_GPIOCON_CON_POS,            \
-				     ADS1X4S0X_REGISTER_GPIOCON_CON_LENGTH)
+struct pio_spi_odm_raw_program {
+    uint8_t *raw_inst;
+    size_t tx_cnt;
+    size_t rx_cnt;
+    size_t iptr;
+    bool half;
+};
 
-/*
- * - AIN0 as positive input
- * - AIN1 as negative input
- */
-#define ADS1X4S0X_REGISTER_INPMUX_SET_DEFAULTS(target)                                             \
-	ADS1X4S0X_REGISTER_INPMUX_MUXP_SET(target, 0b0000);                                        \
-	ADS1X4S0X_REGISTER_INPMUX_MUXN_SET(target, 0b0001)
-/*
- * - disable reference monitor
- * - enable positive reference buffer
- * - disable negative reference buffer
- * - use internal reference
- * - enable internal voltage reference
- */
-#define ADS1X4S0X_REGISTER_REF_SET_DEFAULTS(target)                                                \
-	ADS1X4S0X_REGISTER_REF_FL_REF_EN_SET(target, 0b00);                                        \
-	ADS1X4S0X_REGISTER_REF_NOT_REFP_BUF_SET(target, 0b0);                                      \
-	ADS1X4S0X_REGISTER_REF_NOT_REFN_BUF_SET(target, 0b1);                                      \
-	ADS1X4S0X_REGISTER_REF_REFSEL_SET(target, 0b10);                                           \
-	ADS1X4S0X_REGISTER_REF_REFCON_SET(target, 0b01)
-/*
- * - disable global chop
- * - use internal oscillator
- * - single shot conversion mode
- * - low latency filter
- * - 20 samples per second
- */
-#define ADS1X4S0X_REGISTER_DATARATE_SET_DEFAULTS(target)                                           \
-	ADS1X4S0X_REGISTER_DATARATE_G_CHOP_SET(target, 0b0);                                       \
-	ADS1X4S0X_REGISTER_DATARATE_CLK_SET(target, 0b0);                                          \
-	ADS1X4S0X_REGISTER_DATARATE_MODE_SET(target, 0b1);                                         \
-	ADS1X4S0X_REGISTER_DATARATE_FILTER_SET(target, 0b1);                                       \
-	ADS1X4S0X_REGISTER_DATARATE_DR_SET(target, 0b0100)
-/*
- * - delay of 14*t_mod
- * - disable gain
- * - gain 1
- */
-#define ADS1X4S0X_REGISTER_PGA_SET_DEFAULTS(target)                                                \
-	ADS1X4S0X_REGISTER_PGA_DELAY_SET(target, 0b000);                                           \
-	ADS1X4S0X_REGISTER_PGA_PGA_EN_SET(target, 0b00);                                           \
-	ADS1X4S0X_REGISTER_PGA_GAIN_SET(target, 0b000)
-/*
- * - disable PGA output rail flag
- * - low-side power switch
- * - IDAC off
- */
-#define ADS1X4S0X_REGISTER_IDACMAG_SET_DEFAULTS(target)                                            \
-	ADS1X4S0X_REGISTER_IDACMAG_FL_RAIL_EN_SET(target, 0b0);                                    \
-	ADS1X4S0X_REGISTER_IDACMAG_PSW_SET(target, 0b0);                                           \
-	ADS1X4S0X_REGISTER_IDACMAG_IMAG_SET(target, 0b0000)
-/*
- * - disconnect IDAC1
- * - disconnect IDAC2
- */
-#define ADS1X4S0X_REGISTER_IDACMUX_SET_DEFAULTS(target)                                            \
-	ADS1X4S0X_REGISTER_IDACMUX_I1MUX_SET(target, 0b1111);                                      \
-	ADS1X4S0X_REGISTER_IDACMUX_I2MUX_SET(target, 0b1111)
 
 static inline uint16_t sys_get_be16(const uint8_t src[2])
 {
@@ -460,7 +129,7 @@ static inline void cs_deselect() {
 }
 #endif
 
-#if defined(spi_default) && defined( ADS1X4S0X_CS_PIN)
+#if defined(spi_default) && defined(ADS1X4S0X_CS_PIN)
 static void ads124s06_send_command(uint8_t cmd) {
     cs_select();
     sleep_ms(1);
@@ -527,9 +196,7 @@ static int32_t ads124s06_read_sample() {
 
 	return (int32_t)sys_get_be32(buffer_rx) >> (32 - ADS1X4S0X_RESOLUTION);
 }
-
 #endif
-
 
 void pio_spi_odm_write_read(
         const struct pio_spi_odm_config *spi_odm,
@@ -632,6 +299,7 @@ static void pio_spi_odm_dma_run_forever(struct pio_spi_odm_config *spi_odm,
     dma_channel_configure(spi_odm->dma_chan_tx, &txc, &spi_odm->pio->txf[spi_odm->sm], NULL, 0, false);
 
     /* Config rx */
+
     channel_config_set_read_increment(&rxc1, false);
     channel_config_set_write_increment(&rxc1, true);
     channel_config_set_dreq(&rxc1, pio_get_dreq(spi_odm->pio, spi_odm->sm, false));
@@ -704,7 +372,7 @@ void pio_spi_odm_inst_finalize(struct pio_spi_odm_raw_program *pgm) {
     pgm->tx_cnt = pgm->iptr + 1;
 
     if (pgm->half) {
-        pgm->raw_inst[pgm->iptr] |= (1 << 3);
+        pgm->raw_inst[pgm->iptr] |= (1 << 3);  /* write nop bit */
     }
 }
 
@@ -746,30 +414,31 @@ struct multiple_reading_buf {
     uint32_t readings[NUM_OF_CHAN];
 };
 
-static struct multiple_reading_buf rx_buf1[6];
-static struct multiple_reading_buf rx_buf2[6];
+static void print_buffer(struct multiple_reading_buf *buf, size_t len, bool verbose) {
+    int32_t sample;
+    int64_t my_val_mv;
+    float my_fval_mv;
 
-bool rx_buf1_ready = false;
-bool rx_buf2_ready = false;
+    for (size_t j = 0; j < len; ++j) {
+        if (!verbose) {
+            printf("#%2d\n", j);
+        }
 
-void __not_in_flash_func(dma_handler)() {
-    uint8_t ints0 = dma_hw->ints0;
+        for (int i = 0; i < NUM_OF_CHAN; ++i) {
+            sample = (int32_t)sys_get_be32((uint8_t *)&(buf[j].readings[i])) >> (32 - ADS1X4S0X_RESOLUTION);
 
-    if (ints0 & (1u << spi_odm.dma_chan_rx1)) {
-        dma_hw->ch[spi_odm.dma_chan_rx1].write_addr = (uint8_t *)rx_buf1;
-        rx_buf1_ready = true;
+            if (verbose) {
+                my_val_mv = (int64_t)sample * 2500 >> 23;
+                my_fval_mv = 2500.0 * sample / (1 << 23);
+                printf("[%2d] %d: Read 0x%06x = %d = %lld mV = %.3f mV\n", j, i, sample, sample, my_val_mv, my_fval_mv);
+            } else {
+                printf("%d\n", sample);
+            }
+        }
     }
-    if (ints0 & (1u << spi_odm.dma_chan_rx2)) {
-        dma_hw->ints0 = 1u << spi_odm.dma_chan_rx2;
-        dma_hw->ch[spi_odm.dma_chan_rx2].write_addr = (uint8_t *)rx_buf2;
-        rx_buf2_ready = true;
-    }
-
-    dma_hw->ints0 = ints0;
 }
 
-int main() {
-    stdio_init_all();
+static void init_ads124s06 (uint8_t datarate) {
 #if !defined(spi_default) || !defined(ADS1X4S0X_SCK_PIN) || !defined(ADS1X4S0X_TX_PIN) || !defined(ADS1X4S0X_RX_PIN) || !defined(ADS1X4S0X_CS_PIN)
 #warning this example requires a board with SPI pins
     puts("Default SPI pins were not defined");
@@ -800,116 +469,180 @@ int main() {
 
     ads124s06_send_command(ADS1X4S0X_COMMAND_RESET);
 
-    uint8_t ret;
-    ads124s06_read_register(ADS1X4S0X_REGISTER_ID, &ret);
-    printf("Chip ID is 0x%x\n", ret);
-
-    ads124s06_read_register(ADS1X4S0X_REGISTER_STATUS, &ret);
-    printf("Chip STATUS is 0x%x\n", ret);
+    /*uint8_t ret;*/
+    /*ads124s06_read_register(ADS1X4S0X_REGISTER_ID, &ret);*/
+    /*printf("Chip ID is 0x%x\n", ret);*/
+    /**/
+    /*ads124s06_read_register(ADS1X4S0X_REGISTER_STATUS, &ret);*/
+    /*printf("Chip STATUS is 0x%x\n", ret);*/
 
     ads124s06_write_register(ADS1X4S0X_REGISTER_GPIOCON, 0x01);
     ads124s06_write_register(ADS1X4S0X_REGISTER_GPIODAT, 0xe1);
 
     ads124s06_write_register(ADS1X4S0X_REGISTER_PGA, 0x00);
-    ads124s06_write_register(ADS1X4S0X_REGISTER_DATARATE, 0x32);
+    ads124s06_write_register(ADS1X4S0X_REGISTER_DATARATE, 0x30 | datarate);
     ads124s06_write_register(ADS1X4S0X_REGISTER_REF, 0x39);
     ads124s06_write_register(ADS1X4S0X_REGISTER_IDACMAG, 0x00);
     ads124s06_write_register(ADS1X4S0X_REGISTER_IDACMUX, 0xff);
     ads124s06_write_register(ADS1X4S0X_REGISTER_VBIAS, 0x00);
+}
 
-    int32_t sample;
+void static pio_spi_odm_make_ads124s06_pgm(struct pio_spi_odm_raw_program *pgm) {
+    for (int i = 0; i < NUM_OF_CHAN; ++i) {
+        pio_spi_odm_inst_do_tx_rx(pgm, ADS1X4S0X_COMMAND_WREG | ADS1X4S0X_REGISTER_INPMUX, false);
+        pio_spi_odm_inst_do_tx_rx(pgm, 0x00, false);
+        pio_spi_odm_inst_do_tx_rx(pgm, chan_config[i], false);
+
+        pio_spi_odm_inst_do_tx_rx(pgm, ADS1X4S0X_COMMAND_START, false);
+        pio_spi_odm_inst_do_wait(pgm);
+
+        /*pio_spi_odm_inst_do_tx_rx(pgm, ADS1X4S0X_COMMAND_RDATA, false);*/
+        pio_spi_odm_inst_do_tx_rx(pgm, 0x00, true);
+        pio_spi_odm_inst_do_tx_rx(pgm, 0x00, true);
+        pio_spi_odm_inst_do_tx_rx(pgm, 0x00, true);
+        pio_spi_odm_inst_do_tx_rx(pgm, 0x00, true);
+    }
+    pio_spi_odm_inst_finalize(pgm);
+}
+
+
+static struct multiple_reading_buf rx_buf1[6];
+static struct multiple_reading_buf rx_buf2[6];
+
+bool rx_buf1_ready = false;
+bool rx_buf2_ready = false;
+
+static void __not_in_flash_func(dma_handler)() {
+    uint8_t ints0 = dma_hw->ints0;
+
+    if (ints0 & (1u << spi_odm.dma_chan_rx1)) {
+        dma_hw->ch[spi_odm.dma_chan_rx1].write_addr = (uint8_t *)rx_buf1;
+        rx_buf1_ready = true;
+    }
+    if (ints0 & (1u << spi_odm.dma_chan_rx2)) {
+        dma_hw->ch[spi_odm.dma_chan_rx2].write_addr = (uint8_t *)rx_buf2;
+        rx_buf2_ready = true;
+    }
+
+    dma_hw->ints0 = ints0;
+}
+
+char user_input[256] = {0};
+size_t user_input_len = 0;
+bool is_started = false;
+bool verbose = true;
+uint8_t datarate = 7;
+
+int main() {
+    stdio_init_all();
+    stdio_uart_init();
+
+    init_ads124s06(7);
+
+    pio_spi_odm_make_ads124s06_pgm(&pgm);
+
     uint8_t offset = pio_add_program_spi_cpha1_read_on_demand_program_with_trigger_pin(spi_odm.pio, ADS1X4S0X_DRDY_PIN);
-
     printf("Loaded PIO program at %d\n", offset);
 
-    pio_spi_read_on_demand_init(spi_odm.pio, spi_odm.sm, offset,
-                 8,       // 8 bits per SPI frame
-                 10,      // 1 MHz @ 125 clk_sys
-                 ADS1X4S0X_SCK_PIN,
-                 ADS1X4S0X_TX_PIN,
-                 ADS1X4S0X_RX_PIN,
-                 ADS1X4S0X_DRDY_PIN
-    );
-
-    for (int i = 0; i < NUM_OF_CHAN; ++i) {
-        pio_spi_odm_inst_do_tx_rx(&pgm, ADS1X4S0X_COMMAND_WREG | ADS1X4S0X_REGISTER_INPMUX, false);
-        pio_spi_odm_inst_do_tx_rx(&pgm, 0x00, false);
-        pio_spi_odm_inst_do_tx_rx(&pgm, chan_config[i], false);
-
-        pio_spi_odm_inst_do_tx_rx(&pgm, ADS1X4S0X_COMMAND_START, false);
-        pio_spi_odm_inst_do_wait(&pgm);
-
-        /*pio_spi_odm_inst_do_tx_rx(&pgm, ADS1X4S0X_COMMAND_RDATA, false);*/
-        pio_spi_odm_inst_do_tx_rx(&pgm, 0x00, true);
-        pio_spi_odm_inst_do_tx_rx(&pgm, 0x00, true);
-        pio_spi_odm_inst_do_tx_rx(&pgm, 0x00, true);
-        pio_spi_odm_inst_do_tx_rx(&pgm, 0x00, true);
-    }
-    pio_spi_odm_inst_finalize(&pgm);
+    printf("Compiled pio_spi_odm program:\n");
     pio_spi_odm_print_pgm(&pgm);
 
-    struct multiple_reading_buf rx_buf[1];
+    int c;
 
-    /**/
-    /*gpio_put(ADS1X4S0X_CS_PIN, 0);*/
-    /*while (true) {*/
-    /*    sleep_ms(1);*/
-    /**/
-    /*//    pio_spi_odm_write_read(&spi_odm, &pgm, (uint8_t *)&rx_buf);*/
-    /*    pio_spi_odm_write8_read8_blocking_dma(&spi_odm, &pgm, (uint8_t *)rx_buf);*/
-    /**/
-    /*    for (int i = 0; i < NUM_OF_CHAN; ++i) {*/
-    /*        sample = (int32_t)sys_get_be32((uint8_t *)&rx_buf->readings[i]) >> (32 - ADS1X4S0X_RESOLUTION);*/
-    /*        int64_t my_val_mv = (int64_t)sample * 2500 >> 23;*/
-    /*        float my_fval_mv = 2500.0 * sample / (1 << 23);*/
-    /**/
-    /*        printf("%d: Read 0x%06x = %d = %d mV = %.3f mV\n", i, sample, sample, my_val_mv, my_fval_mv);*/
-    /*    }*/
-    /*    sleep_ms(1000);*/
-    /*}*/
-    /**/
-    /*gpio_put(ADS1X4S0X_CS_PIN, 1);*/
-
-    uint32_t tot_read_cnt = 0;
-
-    gpio_put(ADS1X4S0X_CS_PIN, 0);
-
-    pio_spi_odm_dma_run_forever(&spi_odm, &pgm,
-            dma_handler,
-            (uint8_t *)rx_buf1,
-            sizeof(rx_buf1)/sizeof(uint8_t),
-            (uint8_t *)rx_buf2,
-            sizeof(rx_buf2)/sizeof(uint8_t)
-            );
-
-    int64_t my_val_mv;
-    float my_fval_mv;
-
+    printf("Type `start` to start sampling: \n");
     while (true) {
-        tight_loop_contents();
-        sleep_ms(1);
         if (rx_buf1_ready) {
             rx_buf1_ready = false;
-            for (size_t j = 0; j < sizeof(rx_buf1)/sizeof(struct multiple_reading_buf); ++j) {
-                for (int i = 0; i < NUM_OF_CHAN; ++i) {
-                    sample = (int32_t)sys_get_be32((uint8_t *)&(rx_buf1[j].readings[i])) >> (32 - ADS1X4S0X_RESOLUTION);
-                    my_val_mv = (int64_t)sample * 2500 >> 23;
-                    my_fval_mv = 2500.0 * sample / (1 << 23);
-                    printf("[1:%2d] %d: Read 0x%06x = %d = %lld mV = %.3f mV\n", j, i, sample, sample, my_val_mv, my_fval_mv);
-                }
-            }
+            print_buffer(rx_buf1, sizeof(rx_buf1)/sizeof(struct multiple_reading_buf), verbose);
         }
 
         if (rx_buf2_ready) {
             rx_buf2_ready = false;
-            for (size_t j = 0; j < sizeof(rx_buf2)/sizeof(struct multiple_reading_buf); ++j) {
-                for (int i = 0; i < NUM_OF_CHAN; ++i) {
-                    sample = (int32_t)sys_get_be32((uint8_t *)&(rx_buf2[j].readings[i])) >> (32 - ADS1X4S0X_RESOLUTION);
-                    my_val_mv = (int64_t)sample * 2500 >> 23;
-                    my_fval_mv = 2500.0 * sample / (1 << 23);
-                    printf("[2:%2d] %d: Read 0x%06x = %d = %lld mV = %.3f mV\n", j, i, sample, sample, my_val_mv, my_fval_mv);
+            print_buffer(rx_buf2, sizeof(rx_buf2)/sizeof(struct multiple_reading_buf), verbose);
+        }
+
+        c = getchar_timeout_us(1000);
+
+        if (c != -2 && c != '\r') {
+            user_input[user_input_len] = c;
+            user_input_len++;
+            putchar(c);
+        }
+
+        if (user_input_len == 256) {
+            memset(user_input, '\0', sizeof(user_input)/sizeof(char));
+        }
+
+        if (c == '\r') {
+            printf("\n");
+            if (strcmp(user_input, "start") == 0) {
+                if (is_started) {
+                    printf("started\n");
+                    goto next;
                 }
+                is_started = true;
+
+                init_ads124s06(datarate);
+                gpio_put(ADS1X4S0X_CS_PIN, 0);
+
+                pio_spi_read_on_demand_init(spi_odm.pio, spi_odm.sm, offset,
+                        8,       // 8 bits per SPI frame
+                        10,      // 1 MHz @ 125 clk_sys
+                        ADS1X4S0X_SCK_PIN,
+                        ADS1X4S0X_TX_PIN,
+                        ADS1X4S0X_RX_PIN,
+                        ADS1X4S0X_DRDY_PIN
+                        );
+                pio_sm_restart(spi_odm.pio, spi_odm.sm);
+
+                pio_spi_odm_dma_run_forever(&spi_odm, &pgm,
+                        dma_handler,
+                        (uint8_t *)rx_buf1,
+                        sizeof(rx_buf1)/sizeof(uint8_t),
+                        (uint8_t *)rx_buf2,
+                        sizeof(rx_buf2)/sizeof(uint8_t)
+                        );
+
+                printf("started\n");
+            } else if (strcmp(user_input, "stop") == 0) {
+                if (!is_started) {
+                    printf("stopped\n");
+                    goto next;
+                }
+                is_started = false;
+                hw_clear_bits(&dma_hw->ch[spi_odm.dma_chan_tx_ctrl1].ctrl_trig, DMA_CH0_CTRL_TRIG_EN_BITS);
+
+                while (dma_hw->ch[spi_odm.dma_chan_tx].ctrl_trig & DMA_CH0_CTRL_TRIG_BUSY_BITS) {
+                    sleep_ms(1);
+                }
+
+                hw_clear_bits(&dma_hw->ch[spi_odm.dma_chan_rx1].ctrl_trig, DMA_CH0_CTRL_TRIG_EN_BITS);
+                hw_clear_bits(&dma_hw->ch[spi_odm.dma_chan_rx2].ctrl_trig, DMA_CH0_CTRL_TRIG_EN_BITS);
+
+                gpio_put(ADS1X4S0X_CS_PIN, 1);
+
+                printf("stopped\n");
+            } else if (strcmp(user_input, "set_slow") == 0) {
+                datarate = 4;
+                printf("set slow\n");
+            } else if (strcmp(user_input, "set_fast") == 0) {
+                datarate = 11;
+                printf("set fast\n");
+            } else if (strcmp(user_input, "set_verbose") == 0) {
+                verbose = true;
+                printf("set verbose\n");
+            } else if (strcmp(user_input, "unset_verbose") == 0) {
+                verbose = false;
+                printf("unset verbose\n");
+            } else if (strcmp(user_input, "ping") == 0) {
+                printf("pong\n");
+            } else {
+                printf("?\n");
             }
+
+next:
+            memset(user_input, '\0', sizeof(user_input)/sizeof(char));
+            user_input_len = 0;
         }
     }
 
