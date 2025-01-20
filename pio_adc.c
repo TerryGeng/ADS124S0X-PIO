@@ -755,11 +755,11 @@ bool rx_buf2_ready = false;
 void __not_in_flash_func(dma_handler)() {
     uint8_t ints0 = dma_hw->ints0;
 
-    if (first_run || (ints0 & (1u << spi_odm.dma_chan_rx1))) {
+    if (ints0 & (1u << spi_odm.dma_chan_rx1)) {
         dma_hw->ch[spi_odm.dma_chan_rx1].write_addr = (uint8_t *)rx_buf1;
         rx_buf1_ready = true;
     }
-    if (first_run || (ints0 & (1u << spi_odm.dma_chan_rx2))) {
+    if (ints0 & (1u << spi_odm.dma_chan_rx2)) {
         dma_hw->ints0 = 1u << spi_odm.dma_chan_rx2;
         dma_hw->ch[spi_odm.dma_chan_rx2].write_addr = (uint8_t *)rx_buf2;
         rx_buf2_ready = true;
@@ -818,7 +818,7 @@ int main() {
     ads124s06_write_register(ADS1X4S0X_REGISTER_VBIAS, 0x00);
 
     int32_t sample;
-    uint8_t offset = pio_add_program(spi_odm.pio, &spi_cpha1_read_on_demand_program);
+    uint8_t offset = pio_add_program_spi_cpha1_read_on_demand_program_with_trigger_pin(spi_odm.pio, ADS1X4S0X_DRDY_PIN);
 
     printf("Loaded PIO program at %d\n", offset);
 
@@ -827,7 +827,8 @@ int main() {
                  10,      // 1 MHz @ 125 clk_sys
                  ADS1X4S0X_SCK_PIN,
                  ADS1X4S0X_TX_PIN,
-                 ADS1X4S0X_RX_PIN
+                 ADS1X4S0X_RX_PIN,
+                 ADS1X4S0X_DRDY_PIN
     );
 
     for (int i = 0; i < NUM_OF_CHAN; ++i) {

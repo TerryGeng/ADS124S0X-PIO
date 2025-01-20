@@ -212,7 +212,7 @@ read:
 % c-sdk {
 #include "hardware/gpio.h"
 static inline void pio_spi_read_on_demand_init(PIO pio, uint sm, uint prog_offs, uint n_bits,
-        float clkdiv, uint pin_sck, uint pin_mosi, uint pin_miso) {
+        float clkdiv, uint pin_sck, uint pin_mosi, uint pin_miso, uint pin_trigger) {
     pio_sm_config c = spi_cpha1_read_on_demand_program_get_default_config(prog_offs);
     sm_config_set_out_pins(&c, pin_mosi, 1);
     sm_config_set_in_pins(&c, pin_miso);
@@ -230,7 +230,7 @@ static inline void pio_spi_read_on_demand_init(PIO pio, uint sm, uint prog_offs,
     pio_gpio_init(pio, pin_mosi);
     pio_gpio_init(pio, pin_miso);
     pio_gpio_init(pio, pin_sck);
-    pio_gpio_init(pio, 6);
+    pio_gpio_init(pio, pin_trigger);
 
     // SPI is synchronous, so bypass input synchroniser to reduce input delay.
     hw_set_bits(&pio->input_sync_bypass, 1u << pin_miso);
@@ -238,5 +238,28 @@ static inline void pio_spi_read_on_demand_init(PIO pio, uint sm, uint prog_offs,
     uint entry_point = prog_offs + spi_cpha1_read_on_demand_offset_entry_point;
     pio_sm_init(pio, sm, entry_point, &c);
     pio_sm_set_enabled(pio, sm, true);
+}
+
+static inline uint8_t pio_add_program_spi_cpha1_read_on_demand_program_with_trigger_pin(
+    PIO pio, uint8_t trigger_pin) {
+
+    struct pio_program pio_pgm;
+    uint16_t insts[spi_cpha1_read_on_demand_program.length];
+    memcpy(insts, spi_cpha1_read_on_demand_program_instructions,
+        sizeof(uint16_t)*spi_cpha1_read_on_demand_program.length);
+
+    memcpy(&pio_pgm, &spi_cpha1_read_on_demand_program, sizeof(struct pio_program));
+    pio_pgm.instructions = insts;
+
+    insts[spi_cpha1_read_on_demand_offset_wait_inst] = 0x2000 | trigger_pin;
+
+    /*
+    for (uint i=0; i<spi_cpha1_read_on_demand_program.length; ++i) {
+        printf("0x%04x <-> 0x%04x\n", pio_pgm.instructions[i], spi_cpha1_read_on_demand_program_instructions[i]);
+    }
+    */
+
+
+    return pio_add_program(pio, &pio_pgm);
 }
 %}
