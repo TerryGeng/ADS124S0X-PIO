@@ -169,12 +169,12 @@ static void ads124s06_read_register(uint8_t register_address, uint8_t *buf) {
 
 	spi_write_read_blocking(spi_default, buffer_tx, buffer_rx, 3);
 
-	//printf("ads124s06: read register 0x%02X (send 0x%02X%02X) value 0x%02X\n",
-    //        register_address,
-    //        buffer_tx[0],
-    //        buffer_tx[1],
-    //        buffer_rx[2]
-    //        );
+	/*printf("ads124s06: read register 0x%02X (send 0x%02X%02X) value 0x%02X\n",*/
+	/*           register_address,*/
+	/*           buffer_tx[0],*/
+	/*           buffer_tx[1],*/
+	/*           buffer_rx[2]*/
+	/*           );*/
 
 	*buf = buffer_rx[2];
 
@@ -198,6 +198,74 @@ static int32_t ads124s06_read_sample() {
 }
 #endif
 
+void pio_spi_odm_transceive(
+        const struct pio_spi_odm_config *spi_odm,
+        uint8_t *src,
+        uint8_t *dst,
+        size_t len) {
+
+    io_rw_8 *txfifo = (io_rw_8 *) &spi_odm->pio->txf[spi_odm->sm];
+    io_rw_8 *rxfifo = (io_rw_8 *) &spi_odm->pio->rxf[spi_odm->sm];
+
+    uint8_t tmp;
+    uint8_t inst;
+    uint8_t tx_byte;
+    bool half;
+    uint8_t tx_len;
+    uint8_t rx_len;
+
+    tx_len = len;
+    rx_len = len;
+
+    while (tx_len || rx_len) {
+        if (tx_len) {
+            tx_byte = *src;
+            for (int j = 8; j > 0; j--) {
+                while (pio_sm_is_tx_fifo_full(spi_odm->pio, spi_odm->sm)) {
+                    ;
+                }
+
+                tmp = (1 << 2) | ((tx_byte >> (j-1)) & 1);
+
+                if (!half) {
+                    inst = tmp << 4;
+                    half = true;
+
+                } else {
+                    inst |= tmp;
+                    half = false;
+                    *txfifo = inst;
+                }
+            }
+            tx_len--;
+            src++;
+        }
+
+        if (rx_len) {
+            if (!pio_sm_is_rx_fifo_empty(spi_odm->pio, spi_odm->sm)) {
+                *dst++ = *rxfifo;
+                rx_len--;
+            }
+        }
+    }
+}
+
+static void ads124s06_read_register_pio(
+        const struct pio_spi_odm_config *spi_odm,
+        uint8_t register_address, uint8_t *buf) {
+	uint8_t buffer_tx[3];
+	uint8_t buffer_rx[3];
+
+	buffer_tx[0] = ((uint8_t)ADS1X4S0X_COMMAND_RREG) | ((uint8_t)register_address);
+	buffer_tx[1] = 0x00;
+	buffer_tx[2] = 0x00;
+	/* read one register */
+
+	pio_spi_odm_transceive(spi_odm, buffer_tx, buffer_rx, 3);
+
+	*buf = buffer_rx[2];
+}
+
 void pio_spi_odm_write_read(
         const struct pio_spi_odm_config *spi_odm,
         struct pio_spi_odm_raw_program *pgm,
@@ -206,7 +274,7 @@ void pio_spi_odm_write_read(
     io_rw_8 *txfifo = (io_rw_8 *) &spi_odm->pio->txf[spi_odm->sm];
     io_rw_8 *rxfifo = (io_rw_8 *) &spi_odm->pio->rxf[spi_odm->sm];
 
-    size_t write_len = pgm->iptr + 1;
+    size_t write_len = pgm->tx_cnt;
     size_t read_len = pgm->rx_cnt;
     uint8_t *src = pgm->raw_inst;
 
@@ -346,8 +414,6 @@ void pio_spi_odm_inst_do_tx_rx(struct pio_spi_odm_raw_program *pgm, uint8_t tx_b
             ++pgm->iptr;
         }
     }
-
-    pgm->tx_cnt = pgm->iptr + 1;
 }
 
 void pio_spi_odm_inst_do_wait(struct pio_spi_odm_raw_program *pgm) {
@@ -364,20 +430,19 @@ void pio_spi_odm_inst_do_wait(struct pio_spi_odm_raw_program *pgm) {
 
         ++pgm->iptr;
     }
-
-    pgm->tx_cnt = pgm->iptr + 1;
 }
 
 void pio_spi_odm_inst_finalize(struct pio_spi_odm_raw_program *pgm) {
-    pgm->tx_cnt = pgm->iptr + 1;
-
     if (pgm->half) {
+        pgm->tx_cnt = pgm->iptr + 1;
         pgm->raw_inst[pgm->iptr] |= (1 << 3);  /* write nop bit */
+    } else {
+        pgm->tx_cnt = pgm->iptr;
     }
 }
 
 void pio_spi_odm_print_pgm(struct pio_spi_odm_raw_program *pgm) {
-    size_t raw_pio_insts_cnt = pgm->iptr + 1;
+    size_t raw_pio_insts_cnt = pgm->tx_cnt;
 
     printf("Total insts: %d = (%d bytes)\n", 2 * pgm->iptr + pgm->half, raw_pio_insts_cnt);
     for (int i = 0; i < raw_pio_insts_cnt; ++i) {
@@ -595,6 +660,10 @@ int main() {
                         );
                 pio_sm_restart(spi_odm.pio, spi_odm.sm);
 
+                uint8_t ret;
+                ads124s06_read_register_pio(&spi_odm, ADS1X4S0X_REGISTER_ID, &ret);
+                printf("Chip ID is 0x%x\n", ret);
+
                 pio_spi_odm_dma_run_forever(&spi_odm, &pgm,
                         dma_handler,
                         (uint8_t *)rx_buf1,
@@ -618,6 +687,7 @@ int main() {
 
                 hw_clear_bits(&dma_hw->ch[spi_odm.dma_chan_rx1].ctrl_trig, DMA_CH0_CTRL_TRIG_EN_BITS);
                 hw_clear_bits(&dma_hw->ch[spi_odm.dma_chan_rx2].ctrl_trig, DMA_CH0_CTRL_TRIG_EN_BITS);
+                hw_set_bits(&dma_hw->abort, (1u << spi_odm.dma_chan_rx1) | (1u << spi_odm.dma_chan_rx2));
 
                 gpio_put(ADS1X4S0X_CS_PIN, 1);
 
