@@ -18,7 +18,7 @@
 armed:
     out x, 1         side 0     ; discard next WRITE_DATA_BIT bit
 public wait_inst:
-    wait 0 gpio 6    side 0     ; wait for the trigger to be asserted LOW
+    wait 0 gpio 0    side 0     ; wait for the trigger to be asserted LOW
 public entry_point:
 .wrap_target
 next_inst:
@@ -72,22 +72,10 @@ static inline uint8_t pio_add_program_spi_cpha1_read_on_demand_program_with_trig
     PIO pio, uint8_t trigger_pin) {
 
     struct pio_program pio_pgm;
-    uint16_t insts[spi_cpha1_read_on_demand_program.length];
-    memcpy(insts, spi_cpha1_read_on_demand_program_instructions,
-        sizeof(uint16_t)*spi_cpha1_read_on_demand_program.length);
+    int offset = pio_add_program(pio, &spi_cpha1_read_on_demand_program);
 
-    memcpy(&pio_pgm, &spi_cpha1_read_on_demand_program, sizeof(struct pio_program));
-    pio_pgm.instructions = insts;
+    pio->instr_mem[offset + spi_cpha1_read_on_demand_offset_wait_inst] = 0x2000 | trigger_pin;
 
-    insts[spi_cpha1_read_on_demand_offset_wait_inst] = 0x2000 | trigger_pin;
-
-    /*
-    for (uint i=0; i<spi_cpha1_read_on_demand_program.length; ++i) {
-        printf("0x%04x <-> 0x%04x\n", pio_pgm.instructions[i], spi_cpha1_read_on_demand_program_instructions[i]);
-    }
-    */
-
-
-    return pio_add_program(pio, &pio_pgm);
+    return offset;
 }
 %}
