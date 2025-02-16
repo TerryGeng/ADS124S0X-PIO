@@ -17,7 +17,7 @@ pico_generate_pio_header(pio_adc ${CMAKE_CURRENT_LIST_DIR}/spi.pio)
 # however, alternatively you can choose to generate it somewhere else (in this case in the source tree for check in)
 #pico_generate_pio_header(pio_blink ${CMAKE_CURRENT_LIST_DIR}/blink.pio OUTPUT_DIR ${CMAKE_CURRENT_LIST_DIR})
 
-target_sources(pio_adc PRIVATE pio_adc.c spi_odm.c)
+target_sources(pio_adc PRIVATE pio_adc.c spi_odm.c ads124s0x_pio.c)
 
 target_link_libraries(pio_adc PRIVATE pico_stdlib hardware_pio hardware_dma hardware_spi)
 pico_add_extra_outputs(pio_adc)

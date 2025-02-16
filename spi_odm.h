@@ -5,6 +5,10 @@ struct pio_spi_odm_config {
     PIO pio;
     uint8_t sm;
     uint8_t cs_pin;
+    uint8_t sck_pin;
+    uint8_t tx_pin;
+    uint8_t rx_pin;
+    uint8_t trig_pin;
     uint8_t dma_chan_tx;
     uint8_t dma_chan_rx1;
     uint8_t dma_chan_rx2;

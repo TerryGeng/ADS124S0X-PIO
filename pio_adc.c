@@ -9,139 +9,34 @@
 #include "pico/stdlib.h"
 #include "pico/binary_info.h"
 #include "hardware/dma.h"
+
 #include "spi_odm.h"
+#include "ads124s0x_pio.h"
 
 #define ADS1X4S0X_CS_PIN        5
 #define ADS1X4S0X_SCK_PIN       2
 #define ADS1X4S0X_TX_PIN        3
 #define ADS1X4S0X_RX_PIN        4
-
 #define ADS1X4S0X_DRDY_PIN      6
-
-#define ADS1X4S0X_CLK_FREQ_IN_KHZ                           4096
-#define ADS1X4S0X_RESET_LOW_TIME_IN_CLOCK_CYCLES            4
-#define ADS1X4S0X_START_SYNC_PULSE_DURATION_IN_CLOCK_CYCLES 4
-#define ADS1X4S0X_SETUP_TIME_IN_CLOCK_CYCLES                32
-#define ADS1X4S0X_INPUT_SELECTION_AINCOM                    12
-#define ADS1X4S0X_RESOLUTION                                24
-#define ADS1X4S0X_REF_INTERNAL                              2500
-#define ADS1X4S0X_GPIO_MAX                                  3
-#define ADS1X4S0X_POWER_ON_RESET_TIME_IN_US                 2200
-#define ADS1X4S0X_VBIAS_PIN_MAX                             7
-#define ADS1X4S0X_VBIAS_PIN_MIN                             0
-
-/* Not mentioned in the datasheet, but instead determined experimentally. */
-#define ADS1X4S0X_RESET_DELAY_TIME_SAFETY_MARGIN_IN_US 1000
-#define ADS1X4S0X_RESET_DELAY_TIME_IN_US                                                           \
-	(4096 * 1000 / ADS1X4S0X_CLK_FREQ_IN_KHZ + ADS1X4S0X_RESET_DELAY_TIME_SAFETY_MARGIN_IN_US)
-
-#define ADS1X4S0X_RESET_LOW_TIME_IN_US                                                             \
-	(ADS1X4S0X_RESET_LOW_TIME_IN_CLOCK_CYCLES * 1000 / ADS1X4S0X_CLK_FREQ_IN_KHZ)
-#define ADS1X4S0X_START_SYNC_PULSE_DURATION_IN_US                                                  \
-	(ADS1X4S0X_START_SYNC_PULSE_DURATION_IN_CLOCK_CYCLES * 1000 / ADS1X4S0X_CLK_FREQ_IN_KHZ)
-#define ADS1X4S0X_SETUP_TIME_IN_US                                                                 \
-	(ADS1X4S0X_SETUP_TIME_IN_CLOCK_CYCLES * 1000 / ADS1X4S0X_CLK_FREQ_IN_KHZ)
-
-enum ads1x4s0x_command {
-	ADS1X4S0X_COMMAND_NOP = 0x00,
-	ADS1X4S0X_COMMAND_WAKEUP = 0x02,
-	ADS1X4S0X_COMMAND_POWERDOWN = 0x04,
-	ADS1X4S0X_COMMAND_RESET = 0x06,
-	ADS1X4S0X_COMMAND_START = 0x08,
-	ADS1X4S0X_COMMAND_STOP = 0x0A,
-	ADS1X4S0X_COMMAND_SYOCAL = 0x16,
-	ADS1X4S0X_COMMAND_SYGCAL = 0x17,
-	ADS1X4S0X_COMMAND_SFOCAL = 0x19,
-	ADS1X4S0X_COMMAND_RDATA = 0x12,
-	ADS1X4S0X_COMMAND_RREG = 0x20,
-	ADS1X4S0X_COMMAND_WREG = 0x40,
-};
-
-enum ads1x4s0x_register {
-	ADS1X4S0X_REGISTER_ID = 0x00,
-	ADS1X4S0X_REGISTER_STATUS = 0x01,
-	ADS1X4S0X_REGISTER_INPMUX = 0x02,
-	ADS1X4S0X_REGISTER_PGA = 0x03,
-	ADS1X4S0X_REGISTER_DATARATE = 0x04,
-	ADS1X4S0X_REGISTER_REF = 0x05,
-	ADS1X4S0X_REGISTER_IDACMAG = 0x06,
-	ADS1X4S0X_REGISTER_IDACMUX = 0x07,
-	ADS1X4S0X_REGISTER_VBIAS = 0x08,
-	ADS1X4S0X_REGISTER_SYS = 0x09,
-	ADS1X4S0X_REGISTER_GPIODAT = 0x10,
-	ADS1X4S0X_REGISTER_GPIOCON = 0x11,
-	ADS114S0X_REGISTER_OFCAL0 = 0x0B,
-	ADS114S0X_REGISTER_OFCAL1 = 0x0C,
-	ADS114S0X_REGISTER_FSCAL0 = 0x0E,
-	ADS114S0X_REGISTER_FSCAL1 = 0x0F,
-	ADS124S0X_REGISTER_OFCAL0 = 0x0A,
-	ADS124S0X_REGISTER_OFCAL1 = 0x0B,
-	ADS124S0X_REGISTER_OFCAL2 = 0x0C,
-	ADS124S0X_REGISTER_FSCAL0 = 0x0E,
-	ADS124S0X_REGISTER_FSCAL1 = 0x0F,
-	ADS124S0X_REGISTER_FSCAL2 = 0x0F,
-};
-
-static inline uint16_t sys_get_be16(const uint8_t src[2])
-{
-	return ((uint16_t)src[0] << 8) | src[1];
-}
-
-static inline uint32_t sys_get_be32(const uint8_t src[4])
-{
-	return ((uint32_t)sys_get_be16(&src[0]) << 16) | sys_get_be16(&src[2]);
-}
-
-static void ads124s06_send_command_pio(
-        const struct pio_spi_odm_config *spi_odm,
-        uint8_t cmd) {
-	uint8_t buf;
-
-	pio_spi_odm_transceive(spi_odm, &cmd, &buf, 1);
-}
-
-
-static void ads124s06_read_register_pio(
-        const struct pio_spi_odm_config *spi_odm,
-        uint8_t register_address, uint8_t *buf) {
-	uint8_t buffer_tx[3];
-	uint8_t buffer_rx[3];
-
-	buffer_tx[0] = ((uint8_t)ADS1X4S0X_COMMAND_RREG) | ((uint8_t)register_address);
-	buffer_tx[1] = 0x00;
-	buffer_tx[2] = 0x00;
-	/* read one register */
-
-	pio_spi_odm_transceive(spi_odm, buffer_tx, buffer_rx, 3);
-
-	*buf = buffer_rx[2];
-}
-
-static void ads124s06_write_register_pio(
-        const struct pio_spi_odm_config *spi_odm,
-        uint8_t register_address, uint8_t value) {
-	uint8_t buffer_tx[3];
-	uint8_t buffer_rx[3];
-
-	buffer_tx[0] = ((uint8_t)ADS1X4S0X_COMMAND_WREG) | ((uint8_t)register_address);
-	/* write one register */
-	buffer_tx[1] = 0x00;
-	buffer_tx[2] = value;
-	/* read one register */
-
-	pio_spi_odm_transceive(spi_odm, buffer_tx, buffer_rx, 3);
-}
 
 
 struct pio_spi_odm_config spi_odm = {
-        .pio = pio0,
-        .sm = 0,
-        .cs_pin = ADS1X4S0X_CS_PIN,
-        .dma_chan_tx = 0,
-        .dma_chan_tx_ctrl1 = 1,
-        .dma_chan_tx_ctrl2 = 2,
-        .dma_chan_rx1 = 3,
-        .dma_chan_rx2 = 4,
+    .pio = pio0,
+    .sm = 0,
+    .dma_chan_tx = 0,
+    .dma_chan_tx_ctrl1 = 1,
+    .dma_chan_tx_ctrl2 = 2,
+    .dma_chan_rx1 = 3,
+    .dma_chan_rx2 = 4,
+};
+
+struct ads124s0x_config ads_cfg = {
+    .cs_pin = ADS1X4S0X_CS_PIN,
+    .sck_pin = ADS1X4S0X_SCK_PIN,
+    .tx_pin = ADS1X4S0X_TX_PIN,
+    .rx_pin = ADS1X4S0X_RX_PIN,
+    .drdy_pin = ADS1X4S0X_DRDY_PIN,
+    .data_rate = 4,
 };
 
 #define NUM_OF_CHAN 3
@@ -182,57 +77,6 @@ static void print_buffer(struct multiple_reading_buf *buf, size_t len, bool verb
         }
     }
 }
-
-static void init_ads124s06 (struct pio_spi_odm_config *spi_odm, uint8_t datarate) {
-#if !defined(ADS1X4S0X_SCK_PIN) || !defined(ADS1X4S0X_TX_PIN) || !defined(ADS1X4S0X_RX_PIN) || !defined(ADS1X4S0X_CS_PIN)
-#warning this example requires a board with SPI pins
-    puts("SPI pins were not defined");
-#else
-    // Chip select is active-low, so we'll initialise it to a driven-high state
-    gpio_init(ADS1X4S0X_CS_PIN);
-    gpio_set_dir(ADS1X4S0X_CS_PIN, GPIO_OUT);
-    gpio_put(ADS1X4S0X_CS_PIN, 0);
-
-    ads124s06_send_command_pio(spi_odm, ADS1X4S0X_COMMAND_RESET);
-
-    /*uint8_t ret;*/
-    /*ads124s06_read_register(ADS1X4S0X_REGISTER_ID, &ret);*/
-    /*printf("Chip ID is 0x%x\n", ret);*/
-    /**/
-    /*ads124s06_read_register(ADS1X4S0X_REGISTER_STATUS, &ret);*/
-    /*printf("Chip STATUS is 0x%x\n", ret);*/
-
-    ads124s06_write_register_pio(spi_odm, ADS1X4S0X_REGISTER_GPIOCON, 0x01);
-    ads124s06_write_register_pio(spi_odm, ADS1X4S0X_REGISTER_GPIODAT, 0xe1);
-
-    ads124s06_write_register_pio(spi_odm, ADS1X4S0X_REGISTER_PGA, 0x00);
-    ads124s06_write_register_pio(spi_odm, ADS1X4S0X_REGISTER_DATARATE, 0x30 | datarate);
-    ads124s06_write_register_pio(spi_odm, ADS1X4S0X_REGISTER_REF, 0x39);
-    ads124s06_write_register_pio(spi_odm, ADS1X4S0X_REGISTER_IDACMAG, 0x00);
-    ads124s06_write_register_pio(spi_odm, ADS1X4S0X_REGISTER_IDACMUX, 0xff);
-    ads124s06_write_register_pio(spi_odm, ADS1X4S0X_REGISTER_VBIAS, 0x00);
-
-    gpio_put(ADS1X4S0X_CS_PIN, 1);
-}
-
-void static pio_spi_odm_make_ads124s06_pgm(struct pio_spi_odm_raw_program *pgm) {
-    for (int i = 0; i < NUM_OF_CHAN; ++i) {
-        pio_spi_odm_inst_do_tx_rx(pgm, ADS1X4S0X_COMMAND_WREG | ADS1X4S0X_REGISTER_INPMUX, false);
-        pio_spi_odm_inst_do_tx_rx(pgm, 0x00, false);
-        pio_spi_odm_inst_do_tx_rx(pgm, chan_config[i], false);
-
-        pio_spi_odm_inst_do_tx_rx(pgm, ADS1X4S0X_COMMAND_START, false);
-        pio_spi_odm_inst_do_wait(pgm);
-
-        /*pio_spi_odm_inst_do_tx_rx(pgm, ADS1X4S0X_COMMAND_RDATA, false);*/
-        pio_spi_odm_inst_do_tx_rx(pgm, 0x00, true);
-        pio_spi_odm_inst_do_tx_rx(pgm, 0x00, true);
-        pio_spi_odm_inst_do_tx_rx(pgm, 0x00, true);
-        pio_spi_odm_inst_do_tx_rx(pgm, 0x00, true);
-    }
-    pio_spi_odm_inst_finalize(pgm);
-}
-
 
 static struct multiple_reading_buf rx_buf1[6];
 static struct multiple_reading_buf rx_buf2[6];
@@ -279,21 +123,9 @@ int main() {
     stdio_init_all();
     stdio_uart_init();
 
-    uint8_t offset = pio_add_program_spi_cpha1_read_on_demand_program_with_trigger_pin(spi_odm.pio, ADS1X4S0X_DRDY_PIN);
-    printf("Loaded PIO program at %d\n", offset);
+    ads124s06_init(&spi_odm, &ads_cfg);
 
-    pio_spi_read_on_demand_init(spi_odm.pio, spi_odm.sm, offset,
-            8,       // 8 bits per SPI frame
-            10,      // 1 MHz @ 125 clk_sys
-            ADS1X4S0X_SCK_PIN,
-            ADS1X4S0X_TX_PIN,
-            ADS1X4S0X_RX_PIN,
-            ADS1X4S0X_DRDY_PIN
-            );
-
-    init_ads124s06(&spi_odm, 7);
-
-    pio_spi_odm_make_ads124s06_pgm(&pgm);
+    ads124s06_make_pio_spi_odm_pgm(&pgm, chan_config, NUM_OF_CHAN);
 
     printf("Compiled pio_spi_odm program:\n");
     pio_spi_odm_print_pgm(&pgm);
@@ -333,17 +165,8 @@ int main() {
                 }
                 is_started = true;
 
-                pio_spi_read_on_demand_init(spi_odm.pio, spi_odm.sm, offset,
-                        8,       // 8 bits per SPI frame
-                        10,      // 1 MHz @ 125 clk_sys
-                        ADS1X4S0X_SCK_PIN,
-                        ADS1X4S0X_TX_PIN,
-                        ADS1X4S0X_RX_PIN,
-                        ADS1X4S0X_DRDY_PIN
-                        );
-                pio_sm_restart(spi_odm.pio, spi_odm.sm);
-
-                init_ads124s06(&spi_odm, datarate);
+                ads_cfg.data_rate = datarate;
+                ads124s06_init(&spi_odm, &ads_cfg);
 
                 gpio_put(ADS1X4S0X_CS_PIN, 0);
 
@@ -404,6 +227,4 @@ next:
             user_input_len = 0;
         }
     }
-
-#endif
 }
