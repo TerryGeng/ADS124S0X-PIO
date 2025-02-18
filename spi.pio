@@ -23,18 +23,18 @@ public entry_point:
 .wrap_target
 next_inst:
     out x, 1         side 0     ; Take NOP_BIT, stall here on empty (keep SCK deasserted)
-    jmp !x not_nop   side 0     ; If NOP bit not set, jump to wait (armed)
-    out x, 3         side 0     ; discard next 3 bit
-    jmp next_inst    side 0
+    jmp !x not_nop   side 0     ; If NOP bit not set, jump to not_nop
+    out x, 3         side 0     ; If NOP bit is set, discard next 3 bit
+    jmp next_inst    side 0     ;   and go to the next instruction
 not_nop:
     out x, 1         side 0     ; Take SKIP_DELAY_BIT
     out y, 1         side 0     ; Take SKIP_READ_BIT
     jmp !x armed     side 0     ; If SKIP_DELAY_BIT set, jump to wait (armed)
     out pins, 1      side 1 [4] ; Output WRITE_DATA_BIT, assert SCK (mov pins uses OUT mapping)
     jmp !y read      side 1     ; If SKIP_READ_BIT not set, go to read
-    jmp next_inst    side 0     ; otherwise start next round
+    jmp next_inst    side 0     ;   otherwise start next round
 read:
-    in pins, 1      side 0      ; Read input data, deassert SCK
+    in pins, 1       side 0      ; Read input data, deassert SCK
 .wrap
 
 % c-sdk {
